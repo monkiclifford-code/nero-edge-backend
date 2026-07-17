@@ -66,6 +66,7 @@ export default function SetupSheet() {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [setup, setSetup] = useState<SetupData>(() => loadSetup(jobId ?? "0"));
+  const [previousSetupLoaded, setPreviousSetupLoaded] = useState(false);
 
   // Camera / Upload modal state
   const [showImageModal, setShowImageModal] = useState(false);
@@ -161,6 +162,22 @@ export default function SetupSheet() {
     const savedOp = localStorage.getItem("cnc_operator");
     if (!savedOp) { navigate("/"); return; }
   }, [navigate]);
+
+  // Reload setup when jobId changes
+  useEffect(() => {
+    if (jobId) {
+      const loaded = loadSetup(jobId);
+      setSetup(loaded);
+      // Check if any values were previously saved
+      const hasData = loaded.workholding.some(w => w.value.trim()) ||
+                      loaded.tools.some(t => t.description.trim() || t.toolId.trim()) ||
+                      loaded.programNotes.some(p => p.value.trim() && p.value !== "100%");
+      setPreviousSetupLoaded(hasData);
+      if (hasData) {
+        setTimeout(() => setPreviousSetupLoaded(false), 4000);
+      }
+    }
+  }, [jobId]);
 
   useEffect(() => {
     if (jobId) {
@@ -266,6 +283,17 @@ export default function SetupSheet() {
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/30 px-4 py-3 flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
             <p className="text-sm text-emerald-300 font-medium">Setup sheet saved successfully!</p>
+          </div>
+        )}
+
+        {/* Previous Setup Loaded */}
+        {previousSetupLoaded && (
+          <div className="rounded-lg border border-blue-500/20 bg-blue-950/30 px-4 py-3 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-blue-300">Previous setup loaded for this job!</p>
+              <p className="text-xs text-blue-400/70">Your saved workholding, tools, and notes have been restored.</p>
+            </div>
           </div>
         )}
 
