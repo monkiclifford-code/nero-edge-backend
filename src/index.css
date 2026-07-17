@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 14% 7%;
+    --foreground: 210 20% 96%;
+    --card: 220 14% 10%;
+    --card-foreground: 210 20% 96%;
+    --popover: 220 14% 10%;
+    --popover-foreground: 210 20% 96%;
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 14%;
+    --secondary-foreground: 210 20% 96%;
+    --muted: 220 14% 16%;
+    --muted-foreground: 215 14% 55%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 14% 18%;
+    --input: 220 14% 16%;
+    --ring: 24 95% 53%;
+    --radius: 0.5rem;
+    --sidebar-background: 220 14% 9%;
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 14%;
+    --sidebar-accent-foreground: 210 20% 96%;
+    --sidebar-border: 220 14% 18%;
+    --sidebar-ring: 24 95% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html, body, #root {
+    @apply h-full;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  /* Enterprise card style */
+  .forge-card {
+    @apply rounded-lg border border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)] shadow-sm;
+  }
+  .forge-card-header {
+    @apply px-5 py-4 border-b border-[hsl(220,14%,16%)] flex items-center justify-between;
+  }
+  .forge-card-title {
+    @apply text-sm font-bold text-white/90 tracking-wide;
+  }
+  .forge-card-body {
+    @apply p-5;
+  }
+
+  /* Enterprise button styles */
+  .forge-btn {
+    @apply h-11 px-5 rounded-md font-semibold text-sm transition-all duration-150 active:scale-[0.98];
+  }
+  .forge-btn-primary {
+    @apply forge-btn bg-[hsl(24,95%,53%)] text-white hover:bg-[hsl(24,95%,48%)] shadow-md shadow-orange-900/20;
+  }
+  .forge-btn-secondary {
+    @apply forge-btn bg-[hsl(220,14%,16%)] text-white/80 hover:bg-[hsl(220,14%,20%)] border border-[hsl(220,14%,22%)];
+  }
+  .forge-btn-ghost {
+    @apply forge-btn bg-transparent text-white/60 hover:bg-white/5 hover:text-white;
+  }
+
+  /* Enterprise input */
+  .forge-input {
+    @apply h-12 px-4 rounded-md bg-[hsl(220,14%,13%)] border border-[hsl(220,14%,20%)] text-white placeholder:text-[hsl(215,14%,40%)] focus:border-[hsl(24,95%,53%)] focus:ring-1 focus:ring-[hsl(24,95%,53%)]/30 transition-all;
+  }
+
+  /* Enterprise table */
+  .forge-table {
+    @apply w-full text-sm;
+  }
+  .forge-table thead tr {
+    @apply bg-[hsl(220,14%,14%)] text-left text-[11px] uppercase tracking-wider text-white/40 font-semibold;
+  }
+  .forge-table thead th {
+    @apply py-3 px-4;
+  }
+  .forge-table tbody tr {
+    @apply border-t border-[hsl(220,14%,16%)] hover:bg-[hsl(220,14%,13%)]/50 transition-colors;
+  }
+  .forge-table tbody td {
+    @apply py-3.5 px-4 text-white/70;
+  }
+
+  /* Status badges */
+  .forge-badge-pass {
+    @apply inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20;
+  }
+  .forge-badge-fail {
+    @apply inline-flex items-center rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[10px] font-bold text-rose-400 border border-rose-500/20;
+  }
+  .forge-badge-warn {
+    @apply inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20;
+  }
+  .forge-badge-info {
+    @apply inline-flex items-center rounded-full bg-blue-500/15 px-2.5 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/20;
+  }
+
+  /* KPI stat card */
+  .forge-kpi {
+    @apply forge-card p-5 flex flex-col gap-2;
+  }
+  .forge-kpi-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40;
+  }
+  .forge-kpi-value {
+    @apply text-3xl font-black text-white tracking-tight;
+  }
+  .forge-kpi-sub {
+    @apply text-xs text-white/40 font-medium;
+  }
+
+  /* Scrollbar dark */
+  .forge-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .forge-scroll::-webkit-scrollbar-track {
+    background: hsl(220, 14%, 10%);
+  }
+  .forge-scroll::-webkit-scrollbar-thumb {
+    background: hsl(220, 14%, 25%);
+    border-radius: 3px;
+  }
+  .forge-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(220, 14%, 35%);
+  }
+}

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: forgetraceiq
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_ly0zPlk8kaf3j@ep-green-hill-a4icnxdxva-pooler.eu-central-1.aws.neon.tech/recondb?sslmode=require
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
