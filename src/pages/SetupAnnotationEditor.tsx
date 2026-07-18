@@ -30,6 +30,9 @@ interface Annotation {
 interface SavedSetup {
   imageDataUrl: string;
   annotations: Annotation[];
+  notes: string;
+  partNumber: string;
+  jobNumber: string;
   version: number;
   savedAt: string;
 }
@@ -126,6 +129,9 @@ export default function SetupAnnotationEditor() {
         if (data.annotations) {
           setAnnotations(data.annotations);
           pushHistory(data.annotations);
+        }
+        if (data.notes) {
+          setSetupNotes(data.notes);
         }
       }
     } catch { /* ignore */ }
@@ -528,16 +534,38 @@ export default function SetupAnnotationEditor() {
     setTextValue("");
   };
 
+  // ─── Notes state ───
+  const [setupNotes, setSetupNotes] = useState("");
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+
+  // ─── Get job info for part-number-based storage ───
+  const getJobInfo = (): { partNumber: string; jobNumber: string } => {
+    try {
+      const saved = localStorage.getItem(`cnc_job_info_${jobId}`);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return { partNumber: "", jobNumber: "" };
+  };
+
   // ─── Save setup ───
   const saveSetup = () => {
     if (!jobId || !image) return;
+    const jobInfo = getJobInfo();
     const data: SavedSetup = {
       imageDataUrl: image.src,
       annotations,
+      notes: setupNotes,
+      partNumber: jobInfo.partNumber,
+      jobNumber: jobInfo.jobNumber,
       version: 1,
       savedAt: new Date().toISOString(),
     };
+    // Save by jobId
     localStorage.setItem(`cnc_setup_annotations_${jobId}`, JSON.stringify(data));
+    // Also save by partNumber for cross-job lookup
+    if (jobInfo.partNumber) {
+      localStorage.setItem(`cnc_setup_by_part_${jobInfo.partNumber}`, JSON.stringify(data));
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -612,6 +640,9 @@ export default function SetupAnnotationEditor() {
           )}
           <button className="forge-btn-secondary flex items-center gap-2" onClick={resetView}>
             <RotateCcw className="h-4 w-4" /> Reset View
+          </button>
+          <button className="forge-btn-secondary flex items-center gap-2" onClick={() => setShowNotesPanel(!showNotesPanel)}>
+            <MessageSquare className="h-4 w-4" /> Notes
           </button>
           <button className="forge-btn-primary flex items-center gap-2" onClick={saveSetup}>
             <Save className="h-4 w-4" /> Save Setup
@@ -722,8 +753,10 @@ export default function SetupAnnotationEditor() {
           </button>
         </div>
 
-        {/* Canvas Area */}
-        <div ref={containerRef} className="flex-1 relative bg-[hsl(220,14%,6%)] overflow-hidden">
+        {/* Canvas + Notes Panel */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Canvas Area */}
+          <div ref={containerRef} className={`relative bg-[hsl(220,14%,6%)] overflow-hidden ${showNotesPanel ? 'flex-1' : 'flex-1'}`}>
           {!image && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
               <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
@@ -819,7 +852,36 @@ export default function SetupAnnotationEditor() {
             <span className="text-xs font-semibold text-orange-400 capitalize">{activeTool === "callout" ? "Comment Callout" : activeTool}</span>
           </div>
         </div>
+
+        {/* Notes Side Panel */}
+        {showNotesPanel && (
+          <div className="w-80 border-l border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)] flex flex-col">
+            <div className="px-4 py-3 border-b border-[hsl(220,14%,16%)] flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white/80 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-orange-400" />
+                Setup Notes
+              </h3>
+              <button onClick={() => setShowNotesPanel(false)} className="h-7 w-7 rounded-lg hover:bg-white/5 flex items-center justify-center text-white/40 hover:text-white/60 transition-all">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 p-4">
+              <textarea
+                value={setupNotes}
+                onChange={(e) => setSetupNotes(e.target.value)}
+                placeholder="Add notes about this setup...&#10;e.g. Use soft jaws, check runout before machining, coolant at 8%..."
+                className="w-full h-full resize-none rounded-lg border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,14%)] text-sm text-white placeholder:text-white/30 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 focus-visible:border-orange-500/40"
+              />
+            </div>
+            <div className="px-4 py-3 border-t border-[hsl(220,14%,16%)]">
+              <button onClick={saveSetup} className="w-full h-10 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm font-semibold transition-all flex items-center justify-center gap-2">
+                <Save className="h-4 w-4" /> Save Notes
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </AppLayout>
-  );
+    </div>
+  </AppLayout>
+);
 }
