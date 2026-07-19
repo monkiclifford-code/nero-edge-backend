@@ -172,6 +172,86 @@ CREATE TABLE IF NOT EXISTS casting_batches (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- ═══════════════════════════════════════════════════════════
+-- SETUP SHEET SYSTEM — Persistent database-driven setup library
+-- ═══════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS setup_sheets (
+  id SERIAL PRIMARY KEY,
+  job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  part_number VARCHAR(100) NOT NULL,
+  revision VARCHAR(20) NOT NULL DEFAULT 'A',
+  material_number VARCHAR(100) NOT NULL,
+  operator_id INTEGER NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
+  operator_name VARCHAR(100) NOT NULL,
+  program_notes TEXT,
+  general_notes TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_latest BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS setup_sheet_images (
+  id SERIAL PRIMARY KEY,
+  setup_sheet_id INTEGER NOT NULL REFERENCES setup_sheets(id) ON DELETE CASCADE,
+  image_data TEXT NOT NULL,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS setup_annotations (
+  id SERIAL PRIMARY KEY,
+  image_id INTEGER NOT NULL REFERENCES setup_sheet_images(id) ON DELETE CASCADE,
+  type VARCHAR(30) NOT NULL,
+  color VARCHAR(20) NOT NULL,
+  points TEXT NOT NULL,
+  text VARCHAR(500),
+  number INTEGER,
+  stroke_width INTEGER,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS setup_tools (
+  id SERIAL PRIMARY KEY,
+  setup_sheet_id INTEGER NOT NULL REFERENCES setup_sheets(id) ON DELETE CASCADE,
+  tool_number VARCHAR(20) NOT NULL,
+  description VARCHAR(200),
+  tool_id VARCHAR(100),
+  offset VARCHAR(50),
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS setup_workholding (
+  id SERIAL PRIMARY KEY,
+  setup_sheet_id INTEGER NOT NULL REFERENCES setup_sheets(id) ON DELETE CASCADE,
+  label VARCHAR(100) NOT NULL,
+  value VARCHAR(300),
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS setup_versions (
+  id SERIAL PRIMARY KEY,
+  setup_sheet_id INTEGER NOT NULL REFERENCES setup_sheets(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  operator_id INTEGER NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
+  operator_name VARCHAR(100) NOT NULL,
+  change_summary TEXT,
+  snapshot_data TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_setup_sheets_job_id ON setup_sheets(job_id);
+CREATE INDEX IF NOT EXISTS idx_setup_sheets_part_number ON setup_sheets(part_number);
+CREATE INDEX IF NOT EXISTS idx_setup_sheets_is_latest ON setup_sheets(is_latest);
+CREATE INDEX IF NOT EXISTS idx_setup_tools_sheet_id ON setup_tools(setup_sheet_id);
+CREATE INDEX IF NOT EXISTS idx_setup_workholding_sheet_id ON setup_workholding(setup_sheet_id);
+CREATE INDEX IF NOT EXISTS idx_setup_sheet_images_sheet_id ON setup_sheet_images(setup_sheet_id);
+CREATE INDEX IF NOT EXISTS idx_setup_annotations_image_id ON setup_annotations(image_id);
+CREATE INDEX IF NOT EXISTS idx_setup_versions_sheet_id ON setup_versions(setup_sheet_id);
 `;
 
 export async function runMigrations() {

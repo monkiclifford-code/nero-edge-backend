@@ -198,3 +198,74 @@ export const castingBatches = pgTable("casting_batches", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// ═══════════════════════════════════════════════════════════
+// SETUP SHEET SYSTEM — Persistent database-driven setup library
+// ═══════════════════════════════════════════════════════════
+
+export const setupSheets = pgTable("setup_sheets", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  partNumber: varchar("part_number", { length: 100 }).notNull(),
+  revision: varchar("revision", { length: 20 }).notNull().default("A"),
+  materialNumber: varchar("material_number", { length: 100 }).notNull(),
+  operatorId: integer("operator_id").notNull().references(() => operators.id, { onDelete: "cascade" }),
+  operatorName: varchar("operator_name", { length: 100 }).notNull(),
+  programNotes: text("program_notes"),       // JSON string of program notes
+  generalNotes: text("general_notes"),       // Setup notes
+  version: integer("version").notNull().default(1),
+  isLatest: boolean("is_latest").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const setupSheetImages = pgTable("setup_sheet_images", {
+  id: serial("id").primaryKey(),
+  setupSheetId: integer("setup_sheet_id").notNull().references(() => setupSheets.id, { onDelete: "cascade" }),
+  imageData: text("image_data").notNull(),    // base64 data URL
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const setupAnnotations = pgTable("setup_annotations", {
+  id: serial("id").primaryKey(),
+  imageId: integer("image_id").notNull().references(() => setupSheetImages.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 30 }).notNull(),
+  color: varchar("color", { length: 20 }).notNull(),
+  points: text("points").notNull(),           // JSON array of {x,y}
+  text: varchar("text", { length: 500 }),
+  number: integer("number"),
+  strokeWidth: integer("stroke_width"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const setupTools = pgTable("setup_tools", {
+  id: serial("id").primaryKey(),
+  setupSheetId: integer("setup_sheet_id").notNull().references(() => setupSheets.id, { onDelete: "cascade" }),
+  toolNumber: varchar("tool_number", { length: 20 }).notNull(),
+  description: varchar("description", { length: 200 }),
+  toolId: varchar("tool_id", { length: 100 }),
+  offset: varchar("offset", { length: 50 }),
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const setupWorkholding = pgTable("setup_workholding", {
+  id: serial("id").primaryKey(),
+  setupSheetId: integer("setup_sheet_id").notNull().references(() => setupSheets.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 100 }).notNull(),
+  value: varchar("value", { length: 300 }),
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const setupVersions = pgTable("setup_versions", {
+  id: serial("id").primaryKey(),
+  setupSheetId: integer("setup_sheet_id").notNull().references(() => setupSheets.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  operatorId: integer("operator_id").notNull().references(() => operators.id, { onDelete: "cascade" }),
+  operatorName: varchar("operator_name", { length: 100 }).notNull(),
+  changeSummary: text("change_summary"),
+  snapshotData: text("snapshot_data").notNull(), // Full JSON snapshot
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

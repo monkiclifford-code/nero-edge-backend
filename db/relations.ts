@@ -4,6 +4,7 @@ import {
   setupImages, ncr, ncrWhys, cncPrograms, jobFeedback,
   foundryNcrs, foundryNcrImages, foundryDefects,
   aiVisualPredictions, castingBatches,
+  setupSheets, setupSheetImages, setupAnnotations, setupTools, setupWorkholding, setupVersions,
 } from "./schema";
 
 export const operatorsRelations = relations(operators, ({ many }) => ({
@@ -94,4 +95,39 @@ export const aiVisualPredictionsRelations = relations(aiVisualPredictions, ({ on
 export const castingBatchesRelations = relations(castingBatches, ({ one, many }) => ({
   operator: one(operators, { fields: [castingBatches.operatorId], references: [operators.id] }),
   foundryNcrs: many(foundryNcrs),
+}));
+
+// ═══════════════════════════════════════════════════════════
+// SETUP SHEET RELATIONS
+// ═══════════════════════════════════════════════════════════
+
+export const setupSheetsRelations = relations(setupSheets, ({ one, many }) => ({
+  job: one(jobs, { fields: [setupSheets.jobId], references: [jobs.id] }),
+  operator: one(operators, { fields: [setupSheets.operatorId], references: [operators.id] }),
+  images: many(setupSheetImages),
+  tools: many(setupTools),
+  workholding: many(setupWorkholding),
+  versions: many(setupVersions),
+}));
+
+export const setupSheetImagesRelations = relations(setupSheetImages, ({ one, many }) => ({
+  setupSheet: one(setupSheets, { fields: [setupSheetImages.setupSheetId], references: [setupSheets.id] }),
+  annotations: many(setupAnnotations),
+}));
+
+export const setupAnnotationsRelations = relations(setupAnnotations, ({ one }) => ({
+  image: one(setupSheetImages, { fields: [setupAnnotations.imageId], references: [setupSheetImages.id] }),
+}));
+
+export const setupToolsRelations = relations(setupTools, ({ one }) => ({
+  setupSheet: one(setupSheets, { fields: [setupTools.setupSheetId], references: [setupSheets.id] }),
+}));
+
+export const setupWorkholdingRelations = relations(setupWorkholding, ({ one }) => ({
+  setupSheet: one(setupSheets, { fields: [setupWorkholding.setupSheetId], references: [setupSheets.id] }),
+}));
+
+export const setupVersionsRelations = relations(setupVersions, ({ one }) => ({
+  setupSheet: one(setupSheets, { fields: [setupVersions.setupSheetId], references: [setupSheets.id] }),
+  operator: one(operators, { fields: [setupVersions.operatorId], references: [operators.id] }),
 }));

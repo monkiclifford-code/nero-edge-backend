@@ -8,6 +8,7 @@ import { aiAssistantRouter } from "./routers/aiAssistant";
 import { cncProgramRouter } from "./routers/cncProgram";
 import { feedbackRouter } from "./routers/feedback";
 import { setupImageRouter } from "./routers/setupImage";
+import { setupSheetRouter } from "./routers/setupSheet";
 
 // Phase 7 — Foundry AI Vision Module
 import { foundryRouter } from "./routers/foundry";
@@ -25,6 +26,7 @@ export const appRouter = createRouter({
   cncProgram: cncProgramRouter,
   feedback: feedbackRouter,
   setupImage: setupImageRouter,
+  setupSheet: setupSheetRouter,
   // Phase 7
   foundry: foundryRouter,
   aiVision: aiVisionRouter,

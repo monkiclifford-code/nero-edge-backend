@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/providers/trpc";
 import { isDemoMode, demoApi } from "@/lib/demoApi";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   FileText, ClipboardList, AlertTriangle, CheckCircle2,
-  Lightbulb, Brain, Award, Camera, Plus, Trash2, Save, Pencil, Upload, X, Aperture
+  Lightbulb, Brain, Award, Camera, Plus, Trash2, Save,
+  Pencil, Upload, X, Aperture, History, User, Clock,
+  RotateCcw, ArrowRight, Package
 } from "lucide-react";
 
+// ─── Types ───
 interface ToolEntry {
   id: string;
   number: string;
@@ -22,53 +23,150 @@ interface SetupData {
   workholding: { label: string; value: string }[];
   tools: ToolEntry[];
   programNotes: { label: string; value: string }[];
+  generalNotes: string;
+  images: { id?: number; imageData: string; annotations: any[] }[];
 }
+
+const DEFAULT_WORKHOLDING = [
+  { label: "Vise Jaw Type", value: "" },
+  { label: "Fixture Number", value: "" },
+  { label: "Clamping Torque", value: "" },
+  { label: "Part Zero Location", value: "" },
+  { label: "Work Offset (G54)", value: "" },
+  { label: "Gauge Length", value: "" },
+];
+
+const DEFAULT_TOOLS: ToolEntry[] = [
+  { id: "t1", number: "T01", description: "", toolId: "", offset: "H01 / D01" },
+  { id: "t2", number: "T02", description: "", toolId: "", offset: "H02 / D02" },
+];
+
+const DEFAULT_PROGRAM_NOTES = [
+  { label: "Program Number", value: "" },
+  { label: "Feed Override", value: "100%" },
+  { label: "Spindle Speed Override", value: "100%" },
+  { label: "Special Instructions", value: "" },
+];
 
 function getDefaultSetup(): SetupData {
   return {
-    workholding: [
-      { label: "Vise Jaw Type", value: "" },
-      { label: "Fixture Number", value: "" },
-      { label: "Clamping Torque", value: "" },
-      { label: "Part Zero Location", value: "" },
-      { label: "Work Offset (G54)", value: "" },
-      { label: "Gauge Length", value: "" },
-    ],
-    tools: [
-      { id: "t1", number: "T01", description: "", toolId: "", offset: "H01 / D01" },
-      { id: "t2", number: "T02", description: "", toolId: "", offset: "H02 / D02" },
-    ],
-    programNotes: [
-      { label: "Program Number", value: "" },
-      { label: "Feed Override", value: "100%" },
-      { label: "Spindle Speed Override", value: "100%" },
-      { label: "Special Instructions", value: "" },
-    ],
+    workholding: DEFAULT_WORKHOLDING.map(w => ({ ...w })),
+    tools: DEFAULT_TOOLS.map(t => ({ ...t })),
+    programNotes: DEFAULT_PROGRAM_NOTES.map(p => ({ ...p })),
+    generalNotes: "",
+    images: [],
   };
-}
-
-function loadSetup(jobId: string): SetupData {
-  try {
-    const saved = localStorage.getItem(`cnc_setup_${jobId}`);
-    if (saved) return JSON.parse(saved);
-  } catch { /* ignore */ }
-  return getDefaultSetup();
-}
-
-function saveSetup(jobId: string, data: SetupData) {
-  localStorage.setItem(`cnc_setup_${jobId}`, JSON.stringify(data));
 }
 
 export default function SetupSheet() {
   const navigate = useNavigate();
   const { jobId } = useParams<{ jobId: string }>();
-  const [setupMarked, setSetupMarked] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [setup, setSetup] = useState<SetupData>(() => loadSetup(jobId ?? "0"));
-  const [previousSetupLoaded, setPreviousSetupLoaded] = useState(false);
+  const numericJobId = Number(jobId);
 
-  // Camera / Upload modal state
+  // Auth check
+  const [operator, setOperator] = useState<{ id: number; name: string; operatorId: string } | null>(null);
+
+  useEffect(() => {
+    const savedOp = localStorage.getItem("cnc_operator");
+    if (!savedOp) { navigate("/"); return; }
+    try { setOperator(JSON.parse(savedOp)); } catch { navigate("/"); }
+  }, [navigate]);
+
+  // ─── tRPC: Query existing setup from DATABASE ───
+  const setupQuery = trpc.setupSheet.getByJobId.useQuery(
+    { jobId: numericJobId },
+    { enabled: !isNaN(numericJobId) && numericJobId > 0 && !isDemoMode() }
+  );
+
+  // ─── tRPC: Save mutation ───
+  const saveMutation = trpc.setupSheet.save.useMutation({
+    onSuccess: (data) => {
+      setSavedMsg(data.message);
+      setEditing(false);
+      setupQuery.refetch();
+      setTimeout(() => setSavedMsg(""), 4000);
+    },
+    onError: (err) => {
+      setErrorMsg("Save failed: " + err.message);
+      setTimeout(() => setErrorMsg(""), 5000);
+    },
+  });
+
+  // ─── Job data ───
+  const jobQuery = trpc.job.getById.useQuery(
+    { id: numericJobId },
+    { enabled: !!jobId && !isNaN(numericJobId) && !isDemoMode() }
+  );
+
+  const setupInsights = trpc.ai.getSetupInsights.useQuery(
+    { partNumber: (isDemoMode() ? demoApi.getJobById(numericJobId) : jobQuery.data)?.partNumber ?? "" },
+    { enabled: ((isDemoMode() ? demoApi.getJobById(numericJobId) : jobQuery.data)?.partNumber ?? "").length > 0 && !isDemoMode() }
+  );
+
+  const bestKnownMethod = trpc.feedback.getBestKnownMethod.useQuery(
+    { partNumber: (isDemoMode() ? demoApi.getJobById(numericJobId) : jobQuery.data)?.partNumber ?? "" },
+    { enabled: ((isDemoMode() ? demoApi.getJobById(numericJobId) : jobQuery.data)?.partNumber ?? "").length > 0 && !isDemoMode() }
+  );
+
+  const job = isDemoMode() ? demoApi.getJobById(numericJobId) : jobQuery.data;
+  const insights = isDemoMode() ? demoApi.getSetupInsights(job?.partNumber ?? "") : setupInsights.data;
+  const bkm = isDemoMode() ? demoApi.getBestKnownMethod(job?.partNumber ?? "") : bestKnownMethod.data;
+  const dbSetup = setupQuery.data;
+
+  // ─── Local state ───
+  const [setup, setSetup] = useState<SetupData>(getDefaultSetup);
+  const [editing, setEditing] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [showVersions, setShowVersions] = useState(false);
+  const [setupMarked, setSetupMarked] = useState(false);
+  const [previousLoaded, setPreviousLoaded] = useState(false);
+
+  // ─── Auto-load from DATABASE when setup query returns ───
+  useEffect(() => {
+    if (dbSetup) {
+      const loaded: SetupData = {
+        workholding: dbSetup.workholding.length > 0
+          ? dbSetup.workholding.map(w => ({ label: w.label, value: w.value || "" }))
+          : DEFAULT_WORKHOLDING.map(w => ({ ...w })),
+        tools: dbSetup.tools.length > 0
+          ? dbSetup.tools.map((t, i) => ({
+              id: `t${t.id}`,
+              number: t.toolNumber,
+              description: t.description || "",
+              toolId: t.toolId || "",
+              offset: t.offset || `H${String(i + 1).padStart(2, "0")} / D${String(i + 1).padStart(2, "0")}`,
+            }))
+          : DEFAULT_TOOLS.map(t => ({ ...t })),
+        programNotes: dbSetup.programNotes
+          ? JSON.parse(dbSetup.programNotes)
+          : DEFAULT_PROGRAM_NOTES.map(p => ({ ...p })),
+        generalNotes: dbSetup.generalNotes || "",
+        images: dbSetup.images.map(img => ({
+          id: img.id,
+          imageData: img.imageData,
+          annotations: img.annotations || [],
+        })),
+      };
+      setSetup(loaded);
+      setPreviousLoaded(true);
+      setTimeout(() => setPreviousLoaded(false), 4000);
+    }
+  }, [dbSetup]);
+
+  // ─── Mark setup as viewed ───
+  useEffect(() => {
+    if (jobId) {
+      const viewedJobs = JSON.parse(localStorage.getItem("cnc_setup_viewed") || "[]");
+      if (!viewedJobs.includes(jobId)) {
+        viewedJobs.push(jobId);
+        localStorage.setItem("cnc_setup_viewed", JSON.stringify(viewedJobs));
+      }
+      setSetupMarked(true);
+    }
+  }, [jobId]);
+
+  // ─── Camera / Upload modal state ───
   const [showImageModal, setShowImageModal] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -76,19 +174,17 @@ export default function SetupSheet() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
-  // ─── Start camera: activate first, then attach stream via effect ───
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       cameraStreamRef.current = stream;
-      setCameraActive(true); // Video element will render after this
+      setCameraActive(true);
     } catch (err) {
       console.error("Camera error:", err);
       alert("Could not access camera. Please ensure camera permissions are granted.\n\nIf using a work computer, your IT department may have blocked camera access. Try uploading an image instead.");
     }
   };
 
-  // Attach stream to video element AFTER it renders
   useEffect(() => {
     if (cameraActive && videoRef.current && cameraStreamRef.current) {
       videoRef.current.srcObject = cameraStreamRef.current;
@@ -115,7 +211,7 @@ export default function SetupSheet() {
     if (!ctx) return;
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-    saveImageAndNavigate(dataUrl);
+    addImage(dataUrl);
     stopCamera();
     setShowImageModal(false);
   };
@@ -125,27 +221,24 @@ export default function SetupSheet() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      saveImageAndNavigate(dataUrl);
+      addImage(ev.target?.result as string);
       setShowImageModal(false);
     };
     reader.readAsDataURL(file);
   };
 
-  const saveImageAndNavigate = (dataUrl: string) => {
-    if (!jobId) return;
-    // Save image to localStorage for the annotation editor to pick up
-    localStorage.setItem(`cnc_setup_annotations_${jobId}_pending`, dataUrl);
-    // Also save as a full annotation setup
-    const saved: any = {
-      imageDataUrl: dataUrl,
-      annotations: [],
-      version: 1,
-      savedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(`cnc_setup_annotations_${jobId}`, JSON.stringify(saved));
-    // Navigate to annotation editor
-    navigate(`/setup-annotate/${jobId}`);
+  const addImage = (dataUrl: string) => {
+    setSetup(prev => ({
+      ...prev,
+      images: [...prev.images, { imageData: dataUrl, annotations: [] }],
+    }));
+  };
+
+  const removeImage = (index: number) => {
+    setSetup(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
   };
 
   const openImageModal = () => {
@@ -158,66 +251,45 @@ export default function SetupSheet() {
     setShowImageModal(false);
   };
 
-  useEffect(() => {
-    const savedOp = localStorage.getItem("cnc_operator");
-    if (!savedOp) { navigate("/"); return; }
-  }, [navigate]);
-
-  // Reload setup when jobId changes
-  useEffect(() => {
-    if (jobId) {
-      const loaded = loadSetup(jobId);
-      setSetup(loaded);
-      // Check if any values were previously saved
-      const hasData = loaded.workholding.some(w => w.value.trim()) ||
-                      loaded.tools.some(t => t.description.trim() || t.toolId.trim()) ||
-                      loaded.programNotes.some(p => p.value.trim() && p.value !== "100%");
-      setPreviousSetupLoaded(hasData);
-      if (hasData) {
-        setTimeout(() => setPreviousSetupLoaded(false), 4000);
-      }
-    }
-  }, [jobId]);
-
-  useEffect(() => {
-    if (jobId) {
-      const viewedJobs = JSON.parse(localStorage.getItem("cnc_setup_viewed") || "[]");
-      if (!viewedJobs.includes(jobId)) {
-        viewedJobs.push(jobId);
-        localStorage.setItem("cnc_setup_viewed", JSON.stringify(viewedJobs));
-      }
-      setSetupMarked(true);
-    }
-  }, [jobId]);
-
-  const jobQuery = trpc.job.getById.useQuery(
-    { id: Number(jobId) },
-    { enabled: !!jobId && !isNaN(Number(jobId)) && !isDemoMode() }
-  );
-
-  const setupInsights = trpc.ai.getSetupInsights.useQuery(
-    { partNumber: (isDemoMode() ? demoApi.getJobById(Number(jobId)) : jobQuery.data)?.partNumber ?? "" },
-    { enabled: ((isDemoMode() ? demoApi.getJobById(Number(jobId)) : jobQuery.data)?.partNumber ?? "").length > 0 && !isDemoMode() }
-  );
-
-  const bestKnownMethod = trpc.feedback.getBestKnownMethod.useQuery(
-    { partNumber: (isDemoMode() ? demoApi.getJobById(Number(jobId)) : jobQuery.data)?.partNumber ?? "" },
-    { enabled: ((isDemoMode() ? demoApi.getJobById(Number(jobId)) : jobQuery.data)?.partNumber ?? "").length > 0 && !isDemoMode() }
-  );
-
-  const job = isDemoMode() ? demoApi.getJobById(Number(jobId)) : jobQuery.data;
-  const insights = isDemoMode() ? demoApi.getSetupInsights(job?.partNumber ?? "") : setupInsights.data;
-  const bkm = isDemoMode() ? demoApi.getBestKnownMethod(job?.partNumber ?? "") : bestKnownMethod.data;
-
+  // ─── Save handler: DATABASE SAVE ───
   const handleSave = () => {
-    if (jobId) saveSetup(jobId, setup);
-    setSaved(true);
-    setEditing(false);
-    setTimeout(() => setSaved(false), 3000);
+    if (!job || !operator) return;
+
+    saveMutation.mutate({
+      jobId: numericJobId,
+      partNumber: job.partNumber,
+      revision: job.revision,
+      materialNumber: job.materialNumber,
+      operatorId: operator.id,
+      operatorName: operator.name,
+      programNotes: JSON.stringify(setup.programNotes),
+      generalNotes: setup.generalNotes,
+      workholding: setup.workholding.map((w, i) => ({
+        label: w.label,
+        value: w.value,
+        displayOrder: i,
+      })),
+      tools: setup.tools.map((t, i) => ({
+        toolNumber: t.number,
+        description: t.description,
+        toolId: t.toolId,
+        offset: t.offset,
+        displayOrder: i,
+      })),
+      images: setup.images.map((img, i) => ({
+        imageData: img.imageData,
+        displayOrder: i,
+        annotations: img.annotations || [],
+      })),
+      changeSummary: dbSetup
+        ? `Edited by ${operator.name}`
+        : `Initial setup by ${operator.name}`,
+    });
   };
 
+  // ─── Field updaters ───
   const updateWorkholding = (index: number, value: string) => {
-    setSetup((prev) => ({
+    setSetup(prev => ({
       ...prev,
       workholding: prev.workholding.map((w, i) => i === index ? { ...w, value } : w),
     }));
@@ -225,7 +297,7 @@ export default function SetupSheet() {
 
   const addTool = () => {
     const nextNum = setup.tools.length + 1;
-    setSetup((prev) => ({
+    setSetup(prev => ({
       ...prev,
       tools: [...prev.tools, {
         id: `t${Date.now()}`,
@@ -236,34 +308,62 @@ export default function SetupSheet() {
   };
 
   const removeTool = (id: string) => {
-    setSetup((prev) => ({ ...prev, tools: prev.tools.filter((t) => t.id !== id) }));
+    setSetup(prev => ({ ...prev, tools: prev.tools.filter(t => t.id !== id) }));
   };
 
   const updateTool = (id: string, field: keyof ToolEntry, value: string) => {
-    setSetup((prev) => ({
+    setSetup(prev => ({
       ...prev,
-      tools: prev.tools.map((t) => t.id === id ? { ...t, [field]: value } : t),
+      tools: prev.tools.map(t => t.id === id ? { ...t, [field]: value } : t),
     }));
   };
 
   const updateProgramNote = (index: number, value: string) => {
-    setSetup((prev) => ({
+    setSetup(prev => ({
       ...prev,
       programNotes: prev.programNotes.map((p, i) => i === index ? { ...p, value } : p),
     }));
   };
 
+  // ─── Navigate to annotation editor ───
+  const openAnnotationEditor = (imageIndex: number) => {
+    // Save current setup state to localStorage for the editor to pick up
+    localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_index`, String(imageIndex));
+    localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_image`, setup.images[imageIndex]?.imageData || "");
+    navigate(`/setup-annotate/${jobId}`);
+  };
+
+  // ─── Loading / Error states ───
+  const isLoading = setupQuery.isLoading || jobQuery.isLoading;
+
   return (
     <AppLayout
       title="Setup Sheet"
-      subtitle={job ? `Job: ${job.jobNumber} | Part: ${job.partNumber}` : ""}
+      subtitle={job ? `Job: ${job.jobNumber} | Part: ${job.partNumber} | Rev: ${job.revision}` : ""}
       showBack
       onBack={() => navigate("/job-entry")}
       action={
         <div className="flex gap-2">
+          {dbSetup && (
+            <button
+              className="forge-btn-secondary flex items-center gap-2"
+              onClick={() => setShowVersions(!showVersions)}
+            >
+              <History className="h-4 w-4" /> Versions ({dbSetup.version})
+            </button>
+          )}
           {editing ? (
-            <button className="forge-btn-primary flex items-center gap-2" onClick={handleSave}>
-              <Save className="h-4 w-4" /> Save
+            <button
+              className="forge-btn-primary flex items-center gap-2"
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? (
+                <RotateCcw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {saveMutation.isPending ? "Saving..." : "Save"}
             </button>
           ) : (
             <button className="forge-btn-secondary flex items-center gap-2" onClick={() => setEditing(true)}>
@@ -276,28 +376,36 @@ export default function SetupSheet() {
         </div>
       }
     >
-      <div className="max-w-4xl mx-auto space-y-5">
+      <div className="max-w-5xl mx-auto space-y-5">
 
-        {/* Saved confirmation */}
-        {saved && (
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/30 px-4 py-3 flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
-            <p className="text-sm text-emerald-300 font-medium">Setup sheet saved successfully!</p>
+        {/* Loading state */}
+        {isLoading && (
+          <div className="rounded-lg border border-blue-500/20 bg-blue-950/30 px-4 py-3 flex items-center gap-3">
+            <RotateCcw className="h-5 w-5 text-blue-400 animate-spin flex-shrink-0" />
+            <p className="text-sm text-blue-300 font-medium">Loading setup data...</p>
           </div>
         )}
 
-        {/* Previous Setup Loaded */}
-        {previousSetupLoaded && (
+        {/* Success messages */}
+        {savedMsg && (
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/30 px-4 py-3 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
+            <p className="text-sm text-emerald-300 font-medium">{savedMsg}</p>
+          </div>
+        )}
+
+        {previousLoaded && dbSetup && (
           <div className="rounded-lg border border-blue-500/20 bg-blue-950/30 px-4 py-3 flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-blue-400 flex-shrink-0" />
+            <Package className="h-5 w-5 text-blue-400 flex-shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-blue-300">Previous setup loaded for this job!</p>
-              <p className="text-xs text-blue-400/70">Your saved workholding, tools, and notes have been restored.</p>
+              <p className="text-sm font-semibold text-blue-300">Previous setup loaded from database!</p>
+              <p className="text-xs text-blue-400/70">
+                Version {dbSetup.version} by {dbSetup.operatorName} on {new Date(dbSetup.updatedAt).toLocaleString()}
+              </p>
             </div>
           </div>
         )}
 
-        {/* Setup Viewed Confirmation */}
         {setupMarked && (
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/30 px-4 py-3 flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
@@ -308,14 +416,81 @@ export default function SetupSheet() {
           </div>
         )}
 
-        {/* AI: Previous Setup Insights */}
+        {errorMsg && (
+          <div className="rounded-lg border border-rose-500/20 bg-rose-950/30 px-4 py-3 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-rose-400 flex-shrink-0" />
+            <p className="text-sm text-rose-300 font-medium">{errorMsg}</p>
+          </div>
+        )}
+
+        {/* ─── Setup Metadata Card ─── */}
+        {dbSetup && (
+          <div className="forge-card border-l-4 border-l-blue-500">
+            <div className="forge-card-body">
+              <div className="flex items-center gap-2 mb-3">
+                <User className="h-4 w-4 text-blue-400" />
+                <span className="text-sm font-bold text-white/80">Setup Record</span>
+                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                  v{dbSetup.version}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Created By</p>
+                  <p className="font-semibold text-white/80">{dbSetup.operatorName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Date</p>
+                  <p className="font-semibold text-white/80">{new Date(dbSetup.createdAt).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Last Updated</p>
+                  <p className="font-semibold text-white/80">{new Date(dbSetup.updatedAt).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Status</p>
+                  <p className="font-semibold text-emerald-400">Latest</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Version History Panel ─── */}
+        {showVersions && dbSetup && dbSetup.versions.length > 0 && (
+          <div className="forge-card border-l-4 border-l-purple-500">
+            <div className="forge-card-header">
+              <h2 className="forge-card-title flex items-center gap-2">
+                <History className="h-4 w-4 text-purple-400" />
+                Version History
+              </h2>
+            </div>
+            <div className="forge-card-body space-y-2">
+              {dbSetup.versions.map((v) => (
+                <div key={v.id} className="flex items-center gap-3 p-2 rounded-lg bg-[hsl(220,14%,13%)] border border-[hsl(220,14%,16%)]">
+                  <div className="h-8 w-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-purple-400">v{v.version}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white/80">{v.changeSummary || `Version ${v.version}`}</p>
+                    <p className="text-xs text-white/40 flex items-center gap-1">
+                      <User className="h-3 w-3" /> {v.operatorName}
+                      <Clock className="h-3 w-3 ml-2" /> {new Date(v.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ─── AI Insights ─── */}
         {insights?.hasInsights && insights.insights.length > 0 && (
           <div className="forge-card border-l-4 border-l-blue-500">
             <div className="forge-card-header">
               <h2 className="forge-card-title flex items-center gap-2">
                 <Brain className="h-4 w-4 text-blue-400" />
                 Previous Setup Insights
-                <span className="text-[10px] font-normal text-white/40 normal-case tracking-normal">(from past NCRs)</span>
               </h2>
             </div>
             <div className="forge-card-body space-y-3">
@@ -337,14 +512,13 @@ export default function SetupSheet() {
           </div>
         )}
 
-        {/* Best Known Method */}
+        {/* ─── Best Known Method ─── */}
         {bkm?.hasData && (
           <div className="forge-card border-l-4 border-l-emerald-500">
             <div className="forge-card-header">
               <h2 className="forge-card-title flex items-center gap-2">
                 <Award className="h-4 w-4 text-emerald-400" />
                 Best Known Method
-                <span className="text-[10px] font-normal text-white/40 normal-case tracking-normal">(from successful runs)</span>
               </h2>
             </div>
             <div className="forge-card-body space-y-2">
@@ -376,30 +550,75 @@ export default function SetupSheet() {
           </div>
         )}
 
-        {/* Setup Photo & Annotation Links */}
+        {/* ─── Setup Photos ─── */}
         <div className="forge-card">
+          <div className="forge-card-header">
+            <h2 className="forge-card-title flex items-center gap-2">
+              <Camera className="h-4 w-4 text-blue-400" />
+              Setup Photos
+              {setup.images.length > 0 && (
+                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">{setup.images.length}</span>
+              )}
+            </h2>
+          </div>
           <div className="forge-card-body">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <Camera className="h-5 w-5 text-blue-400 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-white/80">Setup Photos & Annotations</p>
-                  <p className="text-xs text-white/40">Document setup with visual annotations for future operators</p>
-                </div>
+            {setup.images.length === 0 ? (
+              <div className="text-center py-6">
+                <Camera className="h-10 w-10 text-white/10 mx-auto mb-2" />
+                <p className="text-sm text-white/30 mb-4">No setup photos yet</p>
+                <button onClick={openImageModal} className="forge-btn-primary text-sm">
+                  <Plus className="h-4 w-4" /> Add Setup Photo
+                </button>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button className="h-11 px-5 rounded-md font-semibold text-sm transition-all duration-150 active:scale-[0.98] flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/30" onClick={openImageModal}>
-                <Pencil className="h-4 w-4" /> Annotate Setup
-              </button>
-              <button className="forge-btn-secondary flex items-center justify-center gap-2" onClick={() => navigate(`/setup-images/${jobId}`)}>
-                <Camera className="h-4 w-4" /> Upload
-              </button>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {setup.images.map((img, idx) => (
+                    <div key={idx} className="relative group rounded-lg overflow-hidden border border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)]">
+                      <img
+                        src={img.imageData}
+                        alt={`Setup ${idx + 1}`}
+                        className="w-full h-40 object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => openAnnotationEditor(idx)}
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => openAnnotationEditor(idx)}
+                          className="h-8 px-3 rounded-md bg-orange-500/80 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1"
+                        >
+                          <Pencil className="h-3 w-3" /> Annotate
+                        </button>
+                        {editing && (
+                          <button
+                            onClick={() => removeImage(idx)}
+                            className="h-8 px-3 rounded-md bg-rose-500/80 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1"
+                          >
+                            <Trash2 className="h-3 w-3" /> Remove
+                          </button>
+                        )}
+                      </div>
+                      <div className="absolute top-2 left-2 bg-black/60 rounded-md px-1.5 py-0.5 text-[10px] text-white/60 font-mono">
+                        #{idx + 1}
+                      </div>
+                      {img.annotations && img.annotations.length > 0 && (
+                        <div className="absolute top-2 right-2 bg-orange-500/80 rounded-full h-5 w-5 flex items-center justify-center">
+                          <span className="text-[10px] text-white font-bold">{img.annotations.length}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {editing && (
+                  <button onClick={openImageModal} className="forge-btn-secondary text-sm w-full flex items-center justify-center gap-2">
+                    <Plus className="h-4 w-4" /> Add Another Photo
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Job Info */}
+        {/* ─── Job Info ─── */}
         {job && (
           <div className="forge-card">
             <div className="forge-card-header">
@@ -428,7 +647,7 @@ export default function SetupSheet() {
           </div>
         )}
 
-        {/* Workholding / Fixtures - EDITABLE */}
+        {/* ─── Workholding / Fixtures ─── */}
         <div className="forge-card">
           <div className="forge-card-header">
             <h2 className="forge-card-title flex items-center gap-2">
@@ -458,7 +677,7 @@ export default function SetupSheet() {
           </div>
         </div>
 
-        {/* Tool List - EDITABLE */}
+        {/* ─── Tool List ─── */}
         <div className="forge-card">
           <div className="forge-card-header flex items-center justify-between">
             <h2 className="forge-card-title">Tool List</h2>
@@ -538,7 +757,7 @@ export default function SetupSheet() {
           </div>
         </div>
 
-        {/* Program / Notes - EDITABLE */}
+        {/* ─── Program / Notes ─── */}
         <div className="forge-card">
           <div className="forge-card-header">
             <h2 className="forge-card-title">Program / Notes</h2>
@@ -565,21 +784,43 @@ export default function SetupSheet() {
           </div>
         </div>
 
+        {/* ─── General Setup Notes ─── */}
+        <div className="forge-card">
+          <div className="forge-card-header">
+            <h2 className="forge-card-title flex items-center gap-2">
+              <FileText className="h-4 w-4 text-emerald-400" />
+              General Setup Notes
+            </h2>
+          </div>
+          <div className="forge-card-body">
+            {editing ? (
+              <textarea
+                value={setup.generalNotes}
+                onChange={(e) => setSetup(prev => ({ ...prev, generalNotes: e.target.value }))}
+                placeholder="Add general notes about this setup...&#10;e.g. Use soft jaws, check runout before machining, coolant at 8%..."
+                className="w-full h-32 resize-none rounded-lg border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,14%)] text-sm text-white placeholder:text-white/30 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 focus-visible:border-orange-500/40"
+              />
+            ) : (
+              <div className="text-sm text-white/70 whitespace-pre-wrap min-h-[3rem]">
+                {setup.generalNotes || <em className="text-white/20">No notes added yet.</em>}
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
 
       {/* ─── Camera / Upload Modal ─── */}
       {showImageModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closeImageModal}>
           <div className="bg-[hsl(220,14%,10%)] border border-[hsl(220,14%,20%)] rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(220,14%,16%)]">
-              <h3 className="text-sm font-semibold text-white/80">Setup Image</h3>
+              <h3 className="text-sm font-semibold text-white/80">Add Setup Photo</h3>
               <button onClick={closeImageModal} className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/5 transition-all">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Camera Preview */}
             {cameraActive && (
               <div className="relative bg-black">
                 <video ref={videoRef} className="w-full aspect-video object-cover" autoPlay playsInline muted />
@@ -592,10 +833,9 @@ export default function SetupSheet() {
               </div>
             )}
 
-            {/* Options */}
             {!cameraActive && (
               <div className="p-6 flex flex-col gap-3">
-                <p className="text-xs text-white/40 text-center mb-2">Choose how to add a setup image</p>
+                <p className="text-xs text-white/40 text-center mb-2">Choose how to add a setup photo</p>
                 <button
                   onClick={startCamera}
                   className="w-full h-14 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 flex items-center justify-center gap-3 transition-all group"
@@ -610,13 +850,7 @@ export default function SetupSheet() {
                   <Upload className="h-6 w-6 text-blue-400 group-hover:scale-110 transition-transform" />
                   <span className="text-sm font-semibold text-blue-400">Upload Image from Device</span>
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
               </div>
             )}
           </div>
@@ -625,5 +859,3 @@ export default function SetupSheet() {
     </AppLayout>
   );
 }
-// deploy trigger
-
