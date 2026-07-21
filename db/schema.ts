@@ -1,5 +1,20 @@
 import { pgTable, serial, varchar, timestamp, decimal, boolean, text, pgEnum, integer } from "drizzle-orm/pg-core";
 
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS (also exported for server-side usage)
+// ═══════════════════════════════════════════════════════════
+
+export const NCR_CLASSIFICATIONS = ["foundry", "machining", "tooling", "supplier"] as const;
+
+export const FOUNDRY_DEFECT_TYPES = [
+  "blow_hole", "porosity", "corrosion", "crack", "sand_inclusion",
+  "shrinkage", "surface_defect", "hard_spot", "misrun", "dimensional_shift", "other"
+] as const;
+
+export const SEVERITY_LEVELS = ["critical", "major", "minor", "observation"] as const;
+
+export const AI_VISION_PROVIDERS = ["mock", "openai", "ollama", "deepseek", "yolo_local"] as const;
+
 // ===== ENUMS =====
 export const jobStatusEnum = pgEnum("job_status", ["active", "completed", "on_hold"]);
 export const programTypeEnum = pgEnum("program_type", ["facing", "od_turning", "id_turning", "drilling"]);
