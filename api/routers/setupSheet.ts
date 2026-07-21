@@ -4,8 +4,9 @@ import { getDb } from "../queries/connection";
 import {
   setupSheets, setupSheetImages, setupAnnotations,
   setupTools, setupWorkholding, setupVersions,
+  jobs,
 } from "@db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, like, sql, count } from "drizzle-orm";
 
 // ─── Input schemas ───
 const workholdingInput = z.object({
@@ -166,6 +167,58 @@ export const setupSheetRouter = createRouter({
         workholding,
         versions,
       };
+    }),
+
+  // ─── LIST ALL setups (for Setup Library search) ───
+  listAll: publicQuery
+    .input(
+      z.object({
+        search: z.string().optional(),
+        partNumber: z.string().optional(),
+        material: z.string().optional(),
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      const db = getDb();
+      const conditions = [];
+      if (input?.search) {
+        conditions.push(like(setupSheets.partNumber, `%${input.search}%`));
+      }
+      if (input?.partNumber) {
+        conditions.push(like(setupSheets.partNumber, `%${input.partNumber}%`));
+      }
+      if (input?.material) {
+        conditions.push(like(setupSheets.materialNumber, `%${input.material}%`));
+      }
+      const whereClause = conditions.length > 0 ? and(...conditions, eq(setupSheets.isLatest, true)) : eq(setupSheets.isLatest, true);
+      const results = await db
+        .select({
+          id: setupSheets.id,
+          jobId: setupSheets.jobId,
+          partNumber: setupSheets.partNumber,
+          revision: setupSheets.revision,
+          materialNumber: setupSheets.materialNumber,
+          operatorName: setupSheets.operatorName,
+          version: setupSheets.version,
+          isLatest: setupSheets.isLatest,
+          createdAt: setupSheets.createdAt,
+          updatedAt: setupSheets.updatedAt,
+          generalNotes: setupSheets.generalNotes,
+          jobNumber: jobs.jobNumber,
+        })
+        .from(setupSheets)
+        .innerJoin(jobs, eq(setupSheets.jobId, jobs.id))
+        .where(whereClause)
+        .orderBy(desc(setupSheets.createdAt))
+        .limit(input?.limit ?? 50)
+        .offset(input?.offset ?? 0);
+      const countResult = await db
+        .select({ total: count() })
+        .from(setupSheets)
+        .where(eq(setupSheets.isLatest, true));
+      return { results, total: Number(countResult[0]?.total ?? 0) };
     }),
 
   // ─── CREATE or UPDATE (upsert) ───

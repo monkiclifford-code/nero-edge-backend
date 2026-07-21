@@ -111,6 +111,73 @@ export const foundryRouter = createRouter({
       return results;
     }),
 
+  // ─── Search NCRs with filters ───
+  searchNcrs: publicQuery
+    .input(
+      z.object({
+        partNumber: z.string().optional(),
+        jobNumber: z.string().optional(),
+        ncrNumber: z.string().optional(),
+        defectType: z.string().optional(),
+        operatorName: z.string().optional(),
+        status: z.string().optional(),
+        severity: z.string().optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = getDb();
+      const conditions = [];
+      if (input.partNumber) conditions.push(like(jobs.partNumber, `%${input.partNumber}%`));
+      if (input.jobNumber) conditions.push(like(jobs.jobNumber, `%${input.jobNumber}%`));
+      if (input.ncrNumber) conditions.push(eq(foundryNcrs.id, Number(input.ncrNumber)));
+      if (input.defectType) conditions.push(eq(foundryNcrs.defectType, input.defectType));
+      if (input.status) conditions.push(eq(foundryNcrs.status, input.status));
+      if (input.severity) conditions.push(eq(foundryNcrs.severity, input.severity));
+      if (input.dateFrom) conditions.push(gte(foundryNcrs.createdAt, new Date(input.dateFrom)));
+      if (input.dateTo) conditions.push(sql`${foundryNcrs.createdAt} <= ${new Date(input.dateTo)}`);
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const results = await db
+        .select({
+          id: foundryNcrs.id,
+          jobId: foundryNcrs.jobId,
+          operatorId: foundryNcrs.operatorId,
+          ncrType: foundryNcrs.ncrType,
+          defectType: foundryNcrs.defectType,
+          problemDescription: foundryNcrs.problemDescription,
+          severity: foundryNcrs.severity,
+          status: foundryNcrs.status,
+          scrapQuantified: foundryNcrs.scrapQuantified,
+          scrapCost: foundryNcrs.scrapCost,
+          createdAt: foundryNcrs.createdAt,
+          updatedAt: foundryNcrs.updatedAt,
+          jobNumber: jobs.jobNumber,
+          partNumber: jobs.partNumber,
+          operatorName: operators.name,
+        })
+        .from(foundryNcrs)
+        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .where(whereClause)
+        .orderBy(desc(foundryNcrs.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const countResult = await db
+        .select({ total: count() })
+        .from(foundryNcrs)
+        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .where(whereClause);
+
+      return { results, total: Number(countResult[0]?.total ?? 0) };
+    }),
+
   // ─── Update NCR Status ───
   updateStatus: publicQuery
     .input(
