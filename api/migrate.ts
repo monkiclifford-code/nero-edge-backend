@@ -219,7 +219,7 @@ CREATE TABLE IF NOT EXISTS setup_tools (
   tool_number VARCHAR(20) NOT NULL,
   description VARCHAR(200),
   tool_id VARCHAR(100),
-  offset VARCHAR(50),
+  "offset" VARCHAR(50),
   display_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
