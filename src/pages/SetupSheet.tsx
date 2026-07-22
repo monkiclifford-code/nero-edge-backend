@@ -327,9 +327,16 @@ export default function SetupSheet() {
 
   // ─── Navigate to annotation editor ───
   const openAnnotationEditor = (imageIndex: number) => {
-    // Save current setup state to localStorage for the editor to pick up
+    // Save image data for immediate loading
     localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_index`, String(imageIndex));
     localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_image`, setup.images[imageIndex]?.imageData || "");
+    // Save FULL setup context so editor can save even without DB data
+    localStorage.setItem(`cnc_setup_context_${jobId}`, JSON.stringify({
+      workholding: setup.workholding.map(w => ({ label: w.label, value: w.value, displayOrder: 0 })),
+      tools: setup.tools.map(t => ({ toolNumber: t.number, description: t.description, toolId: t.toolId, offset: t.offset, displayOrder: 0 })),
+      programNotes: JSON.stringify(setup.programNotes),
+      generalNotes: setup.generalNotes,
+    }));
     navigate(`/setup-annotate/${jobId}`);
   };
 
