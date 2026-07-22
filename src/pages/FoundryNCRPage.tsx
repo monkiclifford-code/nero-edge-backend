@@ -225,7 +225,7 @@ export default function FoundryNCRPage() {
           </div>
           <div className="forge-card-body space-y-4">
             <div>
-              <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-2 block">NCR Type</label>
+              <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-2 block">NCR Type</label>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {NCR_CLASSIFICATIONS.map((t) => (
                   <button key={t.value} onClick={() => setNcrType(t.value)}
@@ -236,7 +236,7 @@ export default function FoundryNCRPage() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-2 block">
+              <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-2 block">
                 Defect Type <span className="text-rose-400">*</span>
                 {images.some((i) => i.aiStatus === "completed") && (
                   <span className="ml-2 text-xs font-normal text-blue-400 inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> AI-detected</span>
@@ -252,7 +252,7 @@ export default function FoundryNCRPage() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-2 block">Severity</label>
+              <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-2 block">Severity</label>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {SEVERITY_LEVELS.map((s) => (
                   <button key={s.value} onClick={() => setSeverity(s.value)}
@@ -291,7 +291,7 @@ export default function FoundryNCRPage() {
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelect} className="hidden" />
-                  <button className="h-14 text-sm font-semibold border border-[hsl(220,13%,92%)] hover:border-orange-500/50 hover:bg-orange-500/5 rounded-md transition-all flex items-center justify-center gap-2 text-[hsl(220,14%,40%)]"
+                  <button className="h-14 text-sm font-semibold border border-[hsl(220,14%,22%)] hover:border-orange-500/50 hover:bg-orange-500/5 rounded-md transition-all flex items-center justify-center gap-2 text-[hsl(220,14%,40%)]"
                     onClick={() => fileInputRef.current?.click()}>
                     <Upload className="h-4 w-4" /> Upload File
                   </button>
@@ -367,7 +367,7 @@ export default function FoundryNCRPage() {
                               }}><Microscope className="h-3 w-3" /> Analyze</button>
                           </div>
                         )}
-                        <button onClick={() => removeImage(img.id)} className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-rose-500/80 flex items-center justify-center text-[hsl(220,14%,35%)] transition-all opacity-0 group-hover:opacity-100">
+                        <button onClick={() => removeImage(img.id)} className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 hover:bg-rose-500/80 flex items-center justify-center text-[hsl(220,14%,65%)] transition-all opacity-0 group-hover:opacity-100">
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -398,41 +398,41 @@ export default function FoundryNCRPage() {
           <div className="forge-card-body space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-1.5 block">Job ID</label>
+                <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Job ID</label>
                 <input type="text" value={jobId} onChange={(e) => setJobId(e.target.value)}
-                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,13%,92%)] bg-white text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="Job ID" />
+                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-[hsl(220,14%,40%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="Job ID" />
               </div>
               <div>
-                <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-1.5 block">Part Number <span className="text-rose-400">*</span></label>
+                <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Part Number <span className="text-rose-400">*</span></label>
                 <input type="text" value={partNumber} onChange={(e) => setPartNumber(e.target.value)}
-                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,13%,92%)] bg-white text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="e.g. PN-CAST-1234" />
+                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-[hsl(220,14%,40%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="e.g. PN-CAST-1234" />
               </div>
             </div>
             <div>
-              <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-1.5 block">Problem Description <span className="text-rose-400">*</span></label>
+              <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Problem Description <span className="text-rose-400">*</span></label>
               <textarea value={problemDescription} onChange={(e) => setProblemDescription(e.target.value)} placeholder="Describe the foundry defect observed..."
-                className="w-full rounded-md border border-[hsl(220,13%,92%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[100px]" />
+                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[100px]" />
             </div>
             <div>
-              <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-1.5 block">Root Cause</label>
+              <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Root Cause</label>
               <textarea value={rootCause} onChange={(e) => setRootCause(e.target.value)} placeholder="What caused this defect?"
-                className="w-full rounded-md border border-[hsl(220,13%,92%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
+                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
             </div>
             <div>
-              <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-1.5 block">Corrective Action</label>
+              <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Corrective Action</label>
               <textarea value={correctiveAction} onChange={(e) => setCorrectiveAction(e.target.value)} placeholder="What action will be taken to prevent recurrence?"
-                className="w-full rounded-md border border-[hsl(220,13%,92%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
+                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
             </div>
             <div className="space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={scrapQuantified} onChange={(e) => setScrapQuantified(e.target.checked)} className="h-4 w-4 rounded border-white/20 bg-white" />
-                <span className="text-sm font-semibold text-[hsl(220,14%,35%)]">Quantify scrap cost</span>
+                <input type="checkbox" checked={scrapQuantified} onChange={(e) => setScrapQuantified(e.target.checked)} className="h-4 w-4 rounded border-[hsl(220,14%,30%)] bg-[hsl(220,14%,16%)]" />
+                <span className="text-sm font-semibold text-[hsl(220,14%,65%)]">Quantify scrap cost</span>
               </label>
               {scrapQuantified && (
                 <div>
-                  <label className="text-sm font-semibold text-[hsl(220,14%,35%)] mb-1.5 block">Scrap Cost ($)</label>
+                  <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Scrap Cost ($)</label>
                   <input type="number" value={scrapCost} onChange={(e) => setScrapCost(e.target.value)} placeholder="e.g. 350.00"
-                    className="w-full h-12 px-4 rounded-md border border-[hsl(220,13%,92%)] bg-white text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" />
+                    className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-[hsl(220,14%,40%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" />
                 </div>
               )}
             </div>
