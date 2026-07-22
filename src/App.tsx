@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // Auth
 import Login from './pages/Login'
@@ -34,6 +35,7 @@ import FoundryNCRHistory from './pages/FoundryNCRHistory'
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <Routes>
       {/* Auth */}
       <Route path="/" element={<Login />} />
@@ -67,5 +69,6 @@ export default function App() {
       <Route path="/foundry-ncr" element={<FoundryNCRPage />} />
       <Route path="/foundry-ncr-history" element={<FoundryNCRHistory />} />
     </Routes>
+    </ErrorBoundary>
   )
 }

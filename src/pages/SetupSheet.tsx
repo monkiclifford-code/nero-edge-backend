@@ -79,9 +79,10 @@ export default function SetupSheet() {
   );
 
   // ─── Query existing setup by PART NUMBER (for cross-job lookup) ───
+  // NOTE: Must use jobQuery.data directly here — 'job' variable isn't declared yet (TDZ)
   const existingSetupByPart = trpc.setupSheet.getByPartNumber.useQuery(
-    { partNumber: job?.partNumber ?? "", revision: job?.revision },
-    { enabled: !!job?.partNumber && !isDemoMode() }
+    { partNumber: jobQuery.data?.partNumber ?? "", revision: jobQuery.data?.revision },
+    { enabled: !!jobQuery.data?.partNumber && !isDemoMode() }
   );
 
   // ─── tRPC: Save mutation ───
