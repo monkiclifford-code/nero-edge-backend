@@ -7,7 +7,7 @@ import {
   FileText, ClipboardList, AlertTriangle, CheckCircle2,
   Lightbulb, Brain, Award, Camera, Plus, Trash2, Save,
   Pencil, Upload, X, Aperture, History, User, Clock,
-  RotateCcw, ArrowRight, Package
+  RotateCcw, ArrowRight, Package, Copy
 } from "lucide-react";
 
 // ─── Types ───
@@ -78,6 +78,12 @@ export default function SetupSheet() {
     { enabled: !isNaN(numericJobId) && numericJobId > 0 && !isDemoMode() }
   );
 
+  // ─── Query existing setup by PART NUMBER (for cross-job lookup) ───
+  const existingSetupByPart = trpc.setupSheet.getByPartNumber.useQuery(
+    { partNumber: job?.partNumber ?? "", revision: job?.revision },
+    { enabled: !!job?.partNumber && !isDemoMode() }
+  );
+
   // ─── tRPC: Save mutation ───
   const saveMutation = trpc.setupSheet.save.useMutation({
     onSuccess: (data) => {
@@ -121,6 +127,51 @@ export default function SetupSheet() {
   const [showVersions, setShowVersions] = useState(false);
   const [setupMarked, setSetupMarked] = useState(false);
   const [previousLoaded, setPreviousLoaded] = useState(false);
+
+  // ─── COPY PREVIOUS SETUP feature ───
+  const [showCopyBanner, setShowCopyBanner] = useState(false);
+  const [copyMsg, setCopyMsg] = useState("");
+
+  useEffect(() => {
+    if (existingSetupByPart.data && !dbSetup && existingSetupByPart.data.jobId !== numericJobId) {
+      setShowCopyBanner(true);
+    } else {
+      setShowCopyBanner(false);
+    }
+  }, [existingSetupByPart.data, dbSetup, numericJobId]);
+
+  const copyPreviousSetup = () => {
+    const prev = existingSetupByPart.data;
+    if (!prev) return;
+    const loaded: SetupData = {
+      workholding: prev.workholding?.length > 0
+        ? prev.workholding.map((w: any) => ({ label: w.label, value: w.value || "" }))
+        : DEFAULT_WORKHOLDING.map(w => ({ ...w })),
+      tools: prev.tools?.length > 0
+        ? prev.tools.map((t: any, i: number) => ({
+            id: `t${t.id}`,
+            number: t.toolNumber,
+            description: t.description || "",
+            toolId: t.toolId || "",
+            offset: t.offset || `H${String(i + 1).padStart(2, "0")} / D${String(i + 1).padStart(2, "0")}`,
+          }))
+        : DEFAULT_TOOLS.map(t => ({ ...t })),
+      programNotes: prev.programNotes
+        ? JSON.parse(prev.programNotes)
+        : DEFAULT_PROGRAM_NOTES.map(p => ({ ...p })),
+      generalNotes: prev.generalNotes || "",
+      images: prev.images?.map((img: any) => ({
+        id: img.id,
+        imageData: img.imageData,
+        annotations: img.annotations || [],
+      })) || [],
+    };
+    setSetup(loaded);
+    setEditing(true);
+    setShowCopyBanner(false);
+    setCopyMsg("Previous setup copied! Edit and save for this job.");
+    setTimeout(() => setCopyMsg(""), 4000);
+  };
 
   // ─── Auto-load from DATABASE when setup query returns ───
   useEffect(() => {
@@ -427,6 +478,34 @@ export default function SetupSheet() {
           <div className="rounded-lg border border-rose-500/20 bg-rose-950/30 px-4 py-3 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-rose-400 flex-shrink-0" />
             <p className="text-sm text-rose-300 font-medium">{errorMsg}</p>
+          </div>
+        )}
+
+        {/* ─── Copy Previous Setup Banner ─── */}
+        {showCopyBanner && existingSetupByPart.data && (
+          <div className="rounded-lg border border-blue-500/20 bg-blue-950/30 px-4 py-3 flex items-center gap-3">
+            <Package className="h-5 w-5 text-blue-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-300">
+                Previous setup found for {job?.partNumber} (Rev {job?.revision}) from Job #{existingSetupByPart.data.jobId}!
+              </p>
+              <p className="text-xs text-blue-400/70">
+                Version {existingSetupByPart.data.version} by {existingSetupByPart.data.operatorName} — {new Date(existingSetupByPart.data.updatedAt).toLocaleDateString()}
+              </p>
+            </div>
+            <button
+              onClick={copyPreviousSetup}
+              className="h-9 px-4 rounded-md bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-semibold transition-all flex items-center gap-1.5 flex-shrink-0"
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy Setup
+            </button>
+          </div>
+        )}
+
+        {copyMsg && (
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/30 px-4 py-3 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
+            <p className="text-sm text-emerald-300 font-medium">{copyMsg}</p>
           </div>
         )}
 
