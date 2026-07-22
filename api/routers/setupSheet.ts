@@ -203,6 +203,8 @@ export const setupSheetRouter = createRouter({
           operatorName: setupSheets.operatorName,
           version: setupSheets.version,
           isLatest: setupSheets.isLatest,
+          copiedFromJobId: setupSheets.copiedFromJobId,
+          copiedFromVersion: setupSheets.copiedFromVersion,
           createdAt: setupSheets.createdAt,
           updatedAt: setupSheets.updatedAt,
           generalNotes: setupSheets.generalNotes,
@@ -235,6 +237,8 @@ export const setupSheetRouter = createRouter({
       workholding: z.array(workholdingInput).default([]),
       tools: z.array(toolInput).default([]),
       images: z.array(imageInput).default([]),
+      copiedFromJobId: z.number().optional(),
+      copiedFromVersion: z.number().optional(),
       changeSummary: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -306,6 +310,8 @@ export const setupSheetRouter = createRouter({
         generalNotes: input.generalNotes || null,
         version: newVersion,
         isLatest: true,
+        copiedFromJobId: input.copiedFromJobId ?? null,
+        copiedFromVersion: input.copiedFromVersion ?? null,
       }).returning();
 
       setupSheetId = sheet.id;

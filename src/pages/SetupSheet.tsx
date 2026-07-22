@@ -131,6 +131,7 @@ export default function SetupSheet() {
   // ─── COPY PREVIOUS SETUP feature ───
   const [showCopyBanner, setShowCopyBanner] = useState(false);
   const [copyMsg, setCopyMsg] = useState("");
+  const [copySource, setCopySource] = useState<{ jobId: number; version: number; partNumber: string; revision: string; operatorName: string } | null>(null);
 
   useEffect(() => {
     if (existingSetupByPart.data && !dbSetup && existingSetupByPart.data.jobId !== numericJobId) {
@@ -169,8 +170,15 @@ export default function SetupSheet() {
     setSetup(loaded);
     setEditing(true);
     setShowCopyBanner(false);
-    setCopyMsg("Previous setup copied! Edit and save for this job.");
-    setTimeout(() => setCopyMsg(""), 4000);
+    setCopySource({
+      jobId: prev.jobId,
+      version: prev.version,
+      partNumber: prev.partNumber,
+      revision: prev.revision,
+      operatorName: prev.operatorName,
+    });
+    setCopyMsg(`Copied from Job #${prev.jobId} Setup V${prev.version}. Edit and save for this job.`);
+    setTimeout(() => setCopyMsg(""), 6000);
   };
 
   // ─── Auto-load from DATABASE when setup query returns ───
@@ -332,9 +340,13 @@ export default function SetupSheet() {
         displayOrder: i,
         annotations: img.annotations || [],
       })),
+      copiedFromJobId: copySource?.jobId,
+      copiedFromVersion: copySource?.version,
       changeSummary: dbSetup
         ? `Edited by ${operator.name}`
-        : `Initial setup by ${operator.name}`,
+        : copySource
+          ? `Copied from Job #${copySource.jobId} V${copySource.version} by ${operator.name}`
+          : `Initial setup by ${operator.name}`,
     });
   };
 
@@ -506,6 +518,36 @@ export default function SetupSheet() {
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/30 px-4 py-3 flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
             <p className="text-sm text-emerald-300 font-medium">{copyMsg}</p>
+          </div>
+        )}
+
+        {/* ─── Copied From Audit Card ─── */}
+        {dbSetup?.copiedFromJobId && (
+          <div className="forge-card border-l-4 border-l-purple-500">
+            <div className="forge-card-body">
+              <div className="flex items-center gap-2 mb-2">
+                <Copy className="h-4 w-4 text-purple-400" />
+                <span className="text-sm font-bold text-white/80">Copied From</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Source Job</p>
+                  <p className="font-semibold text-purple-400">Job #{dbSetup.copiedFromJobId}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Source Version</p>
+                  <p className="font-semibold text-white/80">V{dbSetup.copiedFromVersion}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Part</p>
+                  <p className="font-semibold text-white/80">{job?.partNumber}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Revision</p>
+                  <p className="font-semibold text-white/80">{job?.revision}</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

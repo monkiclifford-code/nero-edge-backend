@@ -4,7 +4,7 @@ import { trpc } from "@/providers/trpc";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   Search, Package, Clock, User, Tag, RotateCcw,
-  ArrowRight, X, BookOpen
+  ArrowRight, X, BookOpen, Copy
 } from "lucide-react";
 
 export default function SetupLibrary() {
@@ -129,6 +129,11 @@ export default function SetupLibrary() {
                     <span className="text-sm font-bold text-white/90">{setup.partNumber}</span>
                     <span className="text-[10px] text-white/30">Rev {setup.revision}</span>
                     <span className="text-[10px] text-white/30">Job: {setup.jobNumber}</span>
+                    {setup.copiedFromJobId && (
+                      <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <Copy className="h-2.5 w-2.5" /> From Job #{setup.copiedFromJobId}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-white/40">
                     <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {setup.materialNumber}</span>

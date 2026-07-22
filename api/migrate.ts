@@ -189,6 +189,8 @@ CREATE TABLE IF NOT EXISTS setup_sheets (
   general_notes TEXT,
   version INTEGER NOT NULL DEFAULT 1,
   is_latest BOOLEAN NOT NULL DEFAULT true,
+  copied_from_job_id INTEGER,
+  copied_from_version INTEGER,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

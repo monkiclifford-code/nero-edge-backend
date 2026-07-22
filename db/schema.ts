@@ -230,6 +230,8 @@ export const setupSheets = pgTable("setup_sheets", {
   generalNotes: text("general_notes"),       // Setup notes
   version: integer("version").notNull().default(1),
   isLatest: boolean("is_latest").notNull().default(true),
+  copiedFromJobId: integer("copied_from_job_id"),
+  copiedFromVersion: integer("copied_from_version"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
