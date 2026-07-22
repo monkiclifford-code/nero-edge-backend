@@ -78,13 +78,6 @@ export default function SetupSheet() {
     { enabled: !isNaN(numericJobId) && numericJobId > 0 && !isDemoMode() }
   );
 
-  // ─── Query existing setup by PART NUMBER (for cross-job lookup) ───
-  // NOTE: Must use jobQuery.data directly here — 'job' variable isn't declared yet (TDZ)
-  const existingSetupByPart = trpc.setupSheet.getByPartNumber.useQuery(
-    { partNumber: jobQuery.data?.partNumber ?? "", revision: jobQuery.data?.revision },
-    { enabled: !!jobQuery.data?.partNumber && !isDemoMode() }
-  );
-
   // ─── tRPC: Save mutation ───
   const saveMutation = trpc.setupSheet.save.useMutation({
     onSuccess: (data) => {
@@ -103,6 +96,13 @@ export default function SetupSheet() {
   const jobQuery = trpc.job.getById.useQuery(
     { id: numericJobId },
     { enabled: !!jobId && !isNaN(numericJobId) && !isDemoMode() }
+  );
+
+  // ─── Query existing setup by PART NUMBER (for cross-job lookup) ───
+  // NOTE: MUST be declared AFTER jobQuery since it depends on jobQuery.data
+  const existingSetupByPart = trpc.setupSheet.getByPartNumber.useQuery(
+    { partNumber: jobQuery.data?.partNumber ?? "", revision: jobQuery.data?.revision },
+    { enabled: !!jobQuery.data?.partNumber && !isDemoMode() }
   );
 
   const setupInsights = trpc.ai.getSetupInsights.useQuery(
