@@ -32,8 +32,8 @@ export const inspectionRouter = createRouter({
       const durationSeconds = Math.round((now.getTime() - startedAt.getTime()) / 1000);
       const failCount = input.items.filter((i) => !i.isPass).length;
 
-      // Create inspection record
-      const insertResult = await db
+      // Create inspection record (PostgreSQL: use .returning())
+      const [inserted] = await db
         .insert(inspections)
         .values({
           jobId: input.jobId,
@@ -43,14 +43,14 @@ export const inspectionRouter = createRouter({
           completedAt: now,
           durationSeconds: durationSeconds,
           failCount: failCount,
-        });
+        })
+        .returning({ id: inspections.id });
 
-      const insertedId = insertResult[0]?.insertId;
-      if (!insertedId) {
+      if (!inserted) {
         throw new Error("Failed to insert inspection");
       }
 
-      const inspectionId = Number(insertedId);
+      const inspectionId = inserted.id;
 
       // Insert items
       if (input.items.length > 0) {
