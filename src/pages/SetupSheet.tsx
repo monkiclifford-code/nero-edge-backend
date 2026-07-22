@@ -316,9 +316,9 @@ export default function SetupSheet() {
 
     saveMutation.mutate({
       jobId: numericJobId,
-      partNumber: job.partNumber,
-      revision: job.revision,
-      materialNumber: job.materialNumber,
+      partNumber: job?.partNumber ?? "",
+      revision: job?.revision ?? "A",
+      materialNumber: job?.materialNumber ?? "",
       operatorId: operator.id,
       operatorName: operator.name,
       programNotes: JSON.stringify(setup.programNotes),
@@ -756,19 +756,19 @@ export default function SetupSheet() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Job Number</p>
-                  <p className="font-semibold text-white/80">{job.jobNumber}</p>
+                  <p className="font-semibold text-white/80">{job?.jobNumber ?? "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Part Number</p>
-                  <p className="font-semibold text-white/80">{job.partNumber}</p>
+                  <p className="font-semibold text-white/80">{job?.partNumber ?? "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Material</p>
-                  <p className="font-semibold text-white/80">{job.materialNumber}</p>
+                  <p className="font-semibold text-white/80">{job?.materialNumber ?? "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Revision</p>
-                  <p className="font-semibold text-white/80">{job.revision}</p>
+                  <p className="font-semibold text-white/80">{job?.revision ?? "—"}</p>
                 </div>
               </div>
             </div>
