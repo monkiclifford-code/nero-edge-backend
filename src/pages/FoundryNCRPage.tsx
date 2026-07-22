@@ -400,39 +400,39 @@ export default function FoundryNCRPage() {
               <div>
                 <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Job ID</label>
                 <input type="text" value={jobId} onChange={(e) => setJobId(e.target.value)}
-                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-[hsl(220,14%,40%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="Job ID" />
+                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-white text-sm text-black placeholder:text-[hsl(220,14%,50%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="Job ID" />
               </div>
               <div>
                 <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Part Number <span className="text-rose-400">*</span></label>
                 <input type="text" value={partNumber} onChange={(e) => setPartNumber(e.target.value)}
-                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-[hsl(220,14%,40%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="e.g. PN-CAST-1234" />
+                  className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-white text-sm text-black placeholder:text-[hsl(220,14%,50%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" placeholder="e.g. PN-CAST-1234" />
               </div>
             </div>
             <div>
               <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Problem Description <span className="text-rose-400">*</span></label>
               <textarea value={problemDescription} onChange={(e) => setProblemDescription(e.target.value)} placeholder="Describe the foundry defect observed..."
-                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[100px]" />
+                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-black placeholder:text-[hsl(220,14%,50%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[100px]" />
             </div>
             <div>
               <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Root Cause</label>
               <textarea value={rootCause} onChange={(e) => setRootCause(e.target.value)} placeholder="What caused this defect?"
-                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
+                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-black placeholder:text-[hsl(220,14%,50%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
             </div>
             <div>
               <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Corrective Action</label>
               <textarea value={correctiveAction} onChange={(e) => setCorrectiveAction(e.target.value)} placeholder="What action will be taken to prevent recurrence?"
-                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-white placeholder:text-[hsl(220,14%,60%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
+                className="w-full rounded-md border border-[hsl(220,14%,22%)] bg-white px-3 py-2 text-sm text-black placeholder:text-[hsl(220,14%,50%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30 min-h-[80px]" />
             </div>
             <div className="space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={scrapQuantified} onChange={(e) => setScrapQuantified(e.target.checked)} className="h-4 w-4 rounded border-[hsl(220,14%,30%)] bg-[hsl(220,14%,16%)]" />
+                <input type="checkbox" checked={scrapQuantified} onChange={(e) => setScrapQuantified(e.target.checked)} className="h-4 w-4 rounded border-[hsl(220,14%,60%)] bg-white" />
                 <span className="text-sm font-semibold text-[hsl(220,14%,65%)]">Quantify scrap cost</span>
               </label>
               {scrapQuantified && (
                 <div>
                   <label className="text-sm font-semibold text-[hsl(220,14%,65%)] mb-1.5 block">Scrap Cost ($)</label>
                   <input type="number" value={scrapCost} onChange={(e) => setScrapCost(e.target.value)} placeholder="e.g. 350.00"
-                    className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-[hsl(220,14%,40%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" />
+                    className="w-full h-12 px-4 rounded-md border border-[hsl(220,14%,22%)] bg-white text-sm text-black placeholder:text-[hsl(220,14%,50%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(24,95%,53%)]/30" />
                 </div>
               )}
             </div>
