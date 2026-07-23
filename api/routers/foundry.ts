@@ -216,7 +216,58 @@ export const foundryRouter = createRouter({
     }),
 
   // ═══════════════════════════════════════════════════════════
-  // SEARCH NCRs — library with filters (only latest)
+  // LIST ALL NCRs — returns ALL NCRs with job/operator info
+  // ═══════════════════════════════════════════════════════════
+  listAllNcrs: publicQuery
+    .input(
+      z.object({
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      const db = getDb();
+      const results = await db
+        .select({
+          id: foundryNcrs.id,
+          jobId: foundryNcrs.jobId,
+          operatorId: foundryNcrs.operatorId,
+          ncrType: foundryNcrs.ncrType,
+          defectType: foundryNcrs.defectType,
+          problemDescription: foundryNcrs.problemDescription,
+          severity: foundryNcrs.severity,
+          status: foundryNcrs.status,
+          scrapQuantified: foundryNcrs.scrapQuantified,
+          scrapCost: foundryNcrs.scrapCost,
+          version: foundryNcrs.version,
+          isLatest: foundryNcrs.isLatest,
+          approvalStatus: foundryNcrs.approvalStatus,
+          approvedBy: foundryNcrs.approvedBy,
+          approvedAt: foundryNcrs.approvedAt,
+          createdAt: foundryNcrs.createdAt,
+          updatedAt: foundryNcrs.updatedAt,
+          jobNumber: jobs.jobNumber,
+          partNumber: jobs.partNumber,
+          materialNumber: jobs.materialNumber,
+          revision: jobs.revision,
+          operatorName: operators.name,
+        })
+        .from(foundryNcrs)
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .leftJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .orderBy(desc(foundryNcrs.createdAt))
+        .limit(input?.limit ?? 50)
+        .offset(input?.offset ?? 0);
+
+      const countResult = await db
+        .select({ total: count() })
+        .from(foundryNcrs);
+
+      return { results, total: Number(countResult[0]?.total ?? 0) };
+    }),
+
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH NCRs — library with filters (uses LEFT JOIN for safety)
   // ═══════════════════════════════════════════════════════════
   searchNcrs: publicQuery
     .input(
@@ -236,7 +287,9 @@ export const foundryRouter = createRouter({
     )
     .query(async ({ input }) => {
       const db = getDb();
-      const conditions = [eq(foundryNcrs.isLatest, true)];
+
+      // Build conditions — start with no mandatory filters
+      const conditions = [];
 
       if (input.partNumber) conditions.push(like(jobs.partNumber, `%${input.partNumber}%`));
       if (input.jobNumber) conditions.push(like(jobs.jobNumber, `%${input.jobNumber}%`));
@@ -247,7 +300,12 @@ export const foundryRouter = createRouter({
       if (input.dateFrom) conditions.push(gte(foundryNcrs.createdAt, new Date(input.dateFrom)));
       if (input.dateTo) conditions.push(sql`${foundryNcrs.createdAt} <= ${new Date(input.dateTo)}`);
 
-      const whereClause = and(...conditions);
+      // If no filters provided, default to showing latest versions only
+      if (conditions.length === 0) {
+        conditions.push(eq(foundryNcrs.isLatest, true));
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
       const results = await db
         .select({
@@ -274,8 +332,8 @@ export const foundryRouter = createRouter({
           operatorName: operators.name,
         })
         .from(foundryNcrs)
-        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
-        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .leftJoin(operators, eq(foundryNcrs.operatorId, operators.id))
         .where(whereClause)
         .orderBy(desc(foundryNcrs.createdAt))
         .limit(input.limit)
@@ -284,8 +342,8 @@ export const foundryRouter = createRouter({
       const countResult = await db
         .select({ total: count() })
         .from(foundryNcrs)
-        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
-        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .leftJoin(operators, eq(foundryNcrs.operatorId, operators.id))
         .where(whereClause);
 
       return { results, total: Number(countResult[0]?.total ?? 0) };
@@ -381,7 +439,7 @@ export const foundryRouter = createRouter({
 
       const whereClause = and(...conditions);
 
-      // Get images joined with NCRs and jobs for full gallery data
+      // Get images joined with NCRs and jobs for full gallery data (LEFT JOIN for safety)
       const images = await db
         .select({
           imageId: foundryNcrImages.id,
@@ -412,8 +470,8 @@ export const foundryRouter = createRouter({
         })
         .from(foundryNcrImages)
         .innerJoin(foundryNcrs, eq(foundryNcrImages.foundryNcrId, foundryNcrs.id))
-        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
-        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .leftJoin(operators, eq(foundryNcrs.operatorId, operators.id))
         .where(whereClause)
         .orderBy(desc(foundryNcrImages.createdAt))
         .limit(input?.limit ?? 50)
@@ -423,7 +481,7 @@ export const foundryRouter = createRouter({
         .select({ total: count() })
         .from(foundryNcrImages)
         .innerJoin(foundryNcrs, eq(foundryNcrImages.foundryNcrId, foundryNcrs.id))
-        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
         .where(whereClause);
 
       return {

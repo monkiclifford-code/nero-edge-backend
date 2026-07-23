@@ -48,7 +48,13 @@ export default function FoundryNcrLibrary() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedNcrId, setSelectedNcrId] = useState<number | null>(null);
 
-  const listQuery = trpc.foundry.searchNcrs.useQuery(
+  // Use listAllNcrs when no filters, searchNcrs when filters applied
+  const hasFilters = partFilter || jobFilter || defectFilter || statusFilter || severityFilter || searchQuery;
+  const listAllQuery = trpc.foundry.listAllNcrs.useQuery(
+    { limit: 50, offset: 0 },
+    { enabled: !hasFilters }
+  );
+  const searchQuery_result = trpc.foundry.searchNcrs.useQuery(
     {
       partNumber: partFilter || undefined,
       jobNumber: jobFilter || undefined,
@@ -58,8 +64,11 @@ export default function FoundryNcrLibrary() {
       severity: severityFilter || undefined,
       limit: 50,
     },
-    { enabled: true }
+    { enabled: !!hasFilters }
   );
+  // Use the right data source
+  const listData = hasFilters ? searchQuery_result.data : listAllQuery.data;
+  const listLoading = hasFilters ? searchQuery_result.isLoading : listAllQuery.isLoading;
 
   const ncrDetail = trpc.foundry.getNcrById.useQuery(
     { id: selectedNcrId! },
@@ -71,14 +80,13 @@ export default function FoundryNcrLibrary() {
   });
 
   const updateStatus = trpc.foundry.updateStatus.useMutation({
-    onSuccess: () => { listQuery.refetch(); ncrDetail.refetch(); },
+    onSuccess: () => { listAllQuery.refetch(); searchQuery_result.refetch(); ncrDetail.refetch(); },
   });
 
   const clearFilters = () => {
     setSearchQuery(""); setPartFilter(""); setJobFilter("");
     setDefectFilter(""); setStatusFilter(""); setSeverityFilter("");
   };
-  const hasFilters = searchQuery || partFilter || jobFilter || defectFilter || statusFilter || severityFilter;
 
   // ─── DETAIL VIEW ───
   if (selectedNcrId && ncrDetail.data) {
@@ -238,7 +246,7 @@ export default function FoundryNcrLibrary() {
   return (
     <AppLayout
       title="Foundry NCR Library"
-      subtitle={`${listQuery.data?.total ?? 0} NCR records`}
+      subtitle={`${listData?.total ?? 0} NCR records${hasFilters ? " (filtered)" : ""}`}
       showBack
       onBack={() => navigate("/foundry-dashboard")}
       action={
@@ -324,12 +332,12 @@ export default function FoundryNcrLibrary() {
         )}
 
         {/* Loading */}
-        {listQuery.isLoading && (
+        {listLoading && (
           <div className="text-center py-12"><RotateCcw className="h-8 w-8 text-orange-400 animate-spin mx-auto mb-3" /><p className="text-sm text-white/40">Loading NCRs...</p></div>
         )}
 
         {/* Empty */}
-        {listQuery.data && listQuery.data.results.length === 0 && (
+        {!listLoading && listData && listData.results.length === 0 && (
           <div className="text-center py-12">
             <Package className="h-12 w-12 text-white/10 mx-auto mb-3" />
             <p className="text-sm text-white/40 font-semibold">No NCRs found</p>
@@ -338,9 +346,9 @@ export default function FoundryNcrLibrary() {
         )}
 
         {/* Results */}
-        {listQuery.data && listQuery.data.results.length > 0 && (
+        {!listLoading && listData && listData.results.length > 0 && (
           <div className="space-y-2">
-            {listQuery.data.results.map((ncr) => (
+            {listData.results.map((ncr) => (
               <button
                 key={ncr.id}
                 onClick={() => setSelectedNcrId(ncr.id)}

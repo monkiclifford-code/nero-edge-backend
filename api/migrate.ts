@@ -258,21 +258,18 @@ EXCEPTION WHEN others THEN
   RAISE NOTICE 'setup_sheets columns may already exist';
 END $$;
 
--- ─── Add version control columns to existing foundry_ncrs ───
-DO $$ BEGIN
-  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
-  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS is_latest BOOLEAN NOT NULL DEFAULT true;
-  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'approved';
-  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_by VARCHAR(100);
-  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
-  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS change_summary TEXT;
-  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);
-  -- Base64 images need TEXT instead of VARCHAR(500)
-  ALTER TABLE foundry_ncr_images ALTER COLUMN image_url TYPE TEXT;
-  ALTER TABLE foundry_ncr_images ALTER COLUMN thumbnail_url TYPE TEXT;
-EXCEPTION WHEN others THEN
-  RAISE NOTICE 'foundry_ncrs columns may already exist';
-END $$;
+-- ─── Add version control columns to existing foundry_ncrs (individual blocks) ───
+DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1; EXCEPTION WHEN others THEN RAISE NOTICE 'version column issue'; END $$;
+DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS is_latest BOOLEAN NOT NULL DEFAULT true; EXCEPTION WHEN others THEN RAISE NOTICE 'is_latest column issue'; END $$;
+DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'approved'; EXCEPTION WHEN others THEN RAISE NOTICE 'approval_status column issue'; END $$;
+DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_by VARCHAR(100); EXCEPTION WHEN others THEN RAISE NOTICE 'approved_by column issue'; END $$;
+DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP; EXCEPTION WHEN others THEN RAISE NOTICE 'approved_at column issue'; END $$;
+DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS change_summary TEXT; EXCEPTION WHEN others THEN RAISE NOTICE 'change_summary column issue'; END $$;
+DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100); EXCEPTION WHEN others THEN RAISE NOTICE 'updated_by column issue'; END $$;
+
+-- ─── Ensure foundry_ncr_images can store base64 data ───
+DO $$ BEGIN ALTER TABLE foundry_ncr_images ALTER COLUMN image_url TYPE TEXT; EXCEPTION WHEN others THEN RAISE NOTICE 'image_url type issue'; END $$;
+DO $$ BEGIN ALTER TABLE foundry_ncr_images ALTER COLUMN thumbnail_url TYPE TEXT; EXCEPTION WHEN others THEN RAISE NOTICE 'thumbnail_url type issue'; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_job_id ON setup_sheets(job_id);
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_part_number ON setup_sheets(part_number);
