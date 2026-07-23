@@ -520,19 +520,20 @@ export default function SetupAnnotationEditor() {
           </div>
         )}
 
-        {/* ═══ TOOLBAR (always shown) ═══ */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)] overflow-x-auto flex-shrink-0">
-          <span className="text-[10px] text-white/30 uppercase tracking-wider font-bold mr-2 flex-shrink-0 hidden sm:block">Tools</span>
+        {/* ═══ TOOLBAR (always shown, wraps on mobile) ═══ */}
+        <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-b border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)] flex-shrink-0">
+          {/* Drawing tools */}
           {tools.map(t => (
             <button key={t.type} onClick={() => setActiveTool(t.type)} title={t.label}
-              className={`h-9 w-9 rounded-md flex items-center justify-center transition-all flex-shrink-0 ${activeTool === t.type ? "bg-orange-500/25 text-orange-400 border border-orange-500/50 shadow-sm shadow-orange-500/10" : "text-white/60 hover:text-white/90 hover:bg-white/10 border border-transparent"}`}>
+              className={`h-8 w-8 sm:h-9 sm:w-9 rounded-md flex items-center justify-center transition-all flex-shrink-0 ${activeTool === t.type ? "bg-orange-500/25 text-orange-400 border border-orange-500/50 shadow-sm shadow-orange-500/10" : "text-white/60 hover:text-white/90 hover:bg-white/10 border border-transparent"}`}>
               {t.icon}
             </button>
           ))}
-          <div className="w-px h-6 bg-white/10 mx-1 flex-shrink-0" />
+          <div className="w-px h-5 sm:h-6 bg-white/10 mx-1 flex-shrink-0" />
+          {/* Color picker */}
           <div className="relative flex-shrink-0">
-            <button onClick={() => setShowColorPicker(!showColorPicker)}
-              className="h-9 px-2 rounded-md flex items-center gap-1.5 text-white/50 hover:text-white/80 hover:bg-white/5 border border-transparent transition-all">
+            <button onClick={() => { setShowColorPicker(!showColorPicker); setShowWidthPicker(false); }}
+              className="h-8 sm:h-9 px-2 rounded-md flex items-center gap-1.5 text-white/50 hover:text-white/80 hover:bg-white/5 border border-transparent transition-all">
               <span className="w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: COLORS[activeColor] }} />
               <ChevronDown className="h-3 w-3" />
             </button>
@@ -546,9 +547,10 @@ export default function SetupAnnotationEditor() {
               </div>
             )}
           </div>
+          {/* Width picker */}
           <div className="relative flex-shrink-0">
-            <button onClick={() => setShowWidthPicker(!showWidthPicker)}
-              className="h-9 px-2 rounded-md flex items-center gap-1.5 text-white/50 hover:text-white/80 hover:bg-white/5 border border-transparent transition-all">
+            <button onClick={() => { setShowWidthPicker(!showWidthPicker); setShowColorPicker(false); }}
+              className="h-8 sm:h-9 px-2 rounded-md flex items-center gap-1.5 text-white/50 hover:text-white/80 hover:bg-white/5 border border-transparent transition-all">
               <span className="w-5 bg-current rounded-full" style={{ height: strokeWidth }} />
               <ChevronDown className="h-3 w-3" />
             </button>
@@ -563,19 +565,21 @@ export default function SetupAnnotationEditor() {
               </div>
             )}
           </div>
-          <div className="w-px h-6 bg-white/10 mx-1 flex-shrink-0" />
-          <button onClick={undo} disabled={historyIndex <= 0} className="h-9 w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 disabled:opacity-20 transition-all flex-shrink-0" title="Undo">
+          <div className="w-px h-5 sm:h-6 bg-white/10 mx-1 flex-shrink-0" />
+          {/* Undo / Redo */}
+          <button onClick={undo} disabled={historyIndex <= 0} className="h-8 w-8 sm:h-9 sm:w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 disabled:opacity-20 transition-all flex-shrink-0" title="Undo">
             <Undo2 className="h-4 w-4" />
           </button>
-          <button onClick={redo} disabled={historyIndex >= history.length - 1} className="h-9 w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 disabled:opacity-20 transition-all flex-shrink-0" title="Redo">
+          <button onClick={redo} disabled={historyIndex >= history.length - 1} className="h-8 w-8 sm:h-9 sm:w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 disabled:opacity-20 transition-all flex-shrink-0" title="Redo">
             <Redo2 className="h-4 w-4" />
           </button>
-          <div className="w-px h-6 bg-white/10 mx-1 flex-shrink-0" />
-          <button onClick={zoomOut} className="h-9 w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 transition-all flex-shrink-0" title="Zoom Out">
+          <div className="w-px h-5 sm:h-6 bg-white/10 mx-1 flex-shrink-0" />
+          {/* Zoom */}
+          <button onClick={zoomOut} className="h-8 w-8 sm:h-9 sm:w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 transition-all flex-shrink-0" title="Zoom Out">
             <ZoomOut className="h-4 w-4" />
           </button>
-          <span className="text-xs text-white/40 font-mono w-12 text-center flex-shrink-0">{Math.round(zoom * 100)}%</span>
-          <button onClick={zoomIn} className="h-9 w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 transition-all flex-shrink-0" title="Zoom In">
+          <span className="text-xs text-white/40 font-mono w-10 sm:w-12 text-center flex-shrink-0">{Math.round(zoom * 100)}%</span>
+          <button onClick={zoomIn} className="h-8 w-8 sm:h-9 sm:w-9 rounded-md flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/5 transition-all flex-shrink-0" title="Zoom In">
             <ZoomIn className="h-4 w-4" />
           </button>
         </div>
