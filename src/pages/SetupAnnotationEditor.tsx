@@ -479,7 +479,7 @@ export default function SetupAnnotationEditor() {
         </div>
       }
     >
-      <div className="flex flex-col h-[calc(100vh-64px)]">
+      <div className="flex flex-col -m-5" style={{ height: 'calc(100vh - 56px)' }}>
 
         {/* Error message */}
         {errorMsg && (
@@ -521,10 +521,11 @@ export default function SetupAnnotationEditor() {
         )}
 
         {/* ═══ TOOLBAR (always shown) ═══ */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-[hsl(220,14%,16%)] bg-[hsl(220,14%,8%)] overflow-x-auto">
+        <div className="flex items-center gap-1 px-3 py-2 border-b border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)] overflow-x-auto flex-shrink-0">
+          <span className="text-[10px] text-white/30 uppercase tracking-wider font-bold mr-2 flex-shrink-0 hidden sm:block">Tools</span>
           {tools.map(t => (
             <button key={t.type} onClick={() => setActiveTool(t.type)} title={t.label}
-              className={`h-9 w-9 rounded-md flex items-center justify-center transition-all flex-shrink-0 ${activeTool === t.type ? "bg-orange-500/20 text-orange-400 border border-orange-500/40" : "text-white/50 hover:text-white/80 hover:bg-white/5 border border-transparent"}`}>
+              className={`h-9 w-9 rounded-md flex items-center justify-center transition-all flex-shrink-0 ${activeTool === t.type ? "bg-orange-500/25 text-orange-400 border border-orange-500/50 shadow-sm shadow-orange-500/10" : "text-white/60 hover:text-white/90 hover:bg-white/10 border border-transparent"}`}>
               {t.icon}
             </button>
           ))}
