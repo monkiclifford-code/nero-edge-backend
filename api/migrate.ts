@@ -246,6 +246,14 @@ CREATE TABLE IF NOT EXISTS setup_versions (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- ─── Add missing columns to existing tables (idempotent) ───
+DO $$ BEGIN
+  ALTER TABLE setup_sheets ADD COLUMN IF NOT EXISTS copied_from_job_id INTEGER;
+  ALTER TABLE setup_sheets ADD COLUMN IF NOT EXISTS copied_from_version INTEGER;
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'setup_sheets columns may already exist';
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_job_id ON setup_sheets(job_id);
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_part_number ON setup_sheets(part_number);
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_is_latest ON setup_sheets(is_latest);
