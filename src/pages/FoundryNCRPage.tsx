@@ -13,7 +13,7 @@ import {
   Camera, Upload, Brain, Save, Loader2, X, AlertTriangle,
   CheckCircle2, Microscope, Trash2, Sparkles,
   QrCode, Monitor, ImageIcon, ShieldAlert, BookOpen,
-  Pencil, ShieldCheck,
+  Pencil, ShieldCheck, RotateCcw,
 } from "lucide-react";
 import AIPredictionCard from "@/components/foundry/AIPredictionCard";
 import ConfidenceBadge from "@/components/foundry/ConfidenceBadge";
@@ -225,7 +225,32 @@ export default function FoundryNCRPage() {
             </div>
             <p className="text-xs text-white/30">A supervisor must approve before this becomes the active NCR.</p>
           </div>
-          <div className="flex gap-3 justify-center pt-2">
+          <div className="flex gap-3 justify-center pt-2 flex-wrap">
+            {/* Approve button — directly on success screen */}
+            <button
+              className="forge-btn-primary h-14 px-6 bg-emerald-600 hover:bg-emerald-500 border-emerald-500 flex items-center gap-2"
+              onClick={() => {
+                if (!operator || !submittedNcrId) return;
+                approveNcr.mutate({
+                  ncrId: submittedNcrId,
+                  approverName: operator.name,
+                  status: "approved",
+                }, {
+                  onSuccess: () => {
+                    setSubmittedNcrId(null);
+                    navigate("/foundry-ncr-library");
+                  },
+                });
+              }}
+              disabled={approveNcr.isPending}
+            >
+              {approveNcr.isPending ? (
+                <RotateCcw className="h-5 w-5 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-5 w-5" />
+              )}
+              {approveNcr.isPending ? "Approving..." : "Approve NCR"}
+            </button>
             <button className="forge-btn-primary h-14 px-6" onClick={() => {
               setSubmittedNcrId(null); setEditMode(false); setEditNcrId(null);
               setProblemDescription(""); setRootCause("");
