@@ -292,10 +292,7 @@ export const setupSheetRouter = createRouter({
           .set({ isLatest: false })
           .where(eq(setupSheets.id, existing.id));
 
-        // Delete old related data (get image IDs first, then delete annotations)
-        const oldImages = await db.select({ id: setupSheetImages.id })
-          .from(setupSheetImages)
-          .where(eq(setupSheetImages.setupSheetId, existing.id));
+        // Delete old related data (oldImages already fetched above for snapshot)
         if (oldImages.length > 0) {
           await db.delete(setupAnnotations)
             .where(inArray(setupAnnotations.imageId, oldImages.map(i => i.id)));
