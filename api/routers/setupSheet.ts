@@ -6,7 +6,7 @@ import {
   setupTools, setupWorkholding, setupVersions,
   jobs,
 } from "@db/schema";
-import { eq, and, desc, like, sql, count } from "drizzle-orm";
+import { eq, and, desc, like, sql, count, inArray } from "drizzle-orm";
 
 // ─── Input schemas ───
 const workholdingInput = z.object({
@@ -281,17 +281,18 @@ export const setupSheetRouter = createRouter({
           .set({ isLatest: false })
           .where(eq(setupSheets.id, existing.id));
 
-        // Delete old related data
+        // Delete old related data (get image IDs first, then delete annotations)
+        const oldImages = await db.select({ id: setupSheetImages.id })
+          .from(setupSheetImages)
+          .where(eq(setupSheetImages.setupSheetId, existing.id));
+        if (oldImages.length > 0) {
+          await db.delete(setupAnnotations)
+            .where(inArray(setupAnnotations.imageId, oldImages.map(i => i.id)));
+        }
         await db.delete(setupWorkholding)
           .where(eq(setupWorkholding.setupSheetId, existing.id));
         await db.delete(setupTools)
           .where(eq(setupTools.setupSheetId, existing.id));
-        await db.delete(setupAnnotations)
-          .where(eq(setupAnnotations.imageId,
-            db.select({ id: setupSheetImages.id })
-              .from(setupSheetImages)
-              .where(eq(setupSheetImages.setupSheetId, existing.id))
-          ));
         await db.delete(setupSheetImages)
           .where(eq(setupSheetImages.setupSheetId, existing.id));
       } else {
