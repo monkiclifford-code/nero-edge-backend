@@ -101,7 +101,7 @@ export const setupSheetRouter = createRouter({
       };
     }),
 
-  // ─── GET by Part Number ───
+  // ─── GET by Part Number — returns LATEST APPROVED setup for auto-load ───
   getByPartNumber: publicQuery
     .input(z.object({
       partNumber: z.string().min(1),
@@ -110,24 +110,20 @@ export const setupSheetRouter = createRouter({
     .query(async ({ input }) => {
       const db = getDb();
 
-      let query = db.select().from(setupSheets)
-        .where(and(
-          eq(setupSheets.partNumber, input.partNumber),
-          eq(setupSheets.isLatest, true)
-        ))
-        .limit(1);
-
+      // Only return APPROVED setups for operator auto-load
+      const conditions = [
+        eq(setupSheets.partNumber, input.partNumber),
+        eq(setupSheets.isLatest, true),
+        eq(setupSheets.approvalStatus, "approved"),
+      ];
       if (input.revision) {
-        query = db.select().from(setupSheets)
-          .where(and(
-            eq(setupSheets.partNumber, input.partNumber),
-            eq(setupSheets.revision, input.revision),
-            eq(setupSheets.isLatest, true)
-          ))
-          .limit(1);
+        conditions.push(eq(setupSheets.revision, input.revision));
       }
 
-      const [sheet] = await query;
+      const [sheet] = await db.select().from(setupSheets)
+        .where(and(...conditions))
+        .limit(1);
+
       if (!sheet) return null;
 
       const [images, tools, workholding, versions] = await Promise.all([
@@ -203,6 +199,9 @@ export const setupSheetRouter = createRouter({
           operatorName: setupSheets.operatorName,
           version: setupSheets.version,
           isLatest: setupSheets.isLatest,
+          approvalStatus: setupSheets.approvalStatus,
+          approvedBy: setupSheets.approvedBy,
+          approvedAt: setupSheets.approvedAt,
           copiedFromJobId: setupSheets.copiedFromJobId,
           copiedFromVersion: setupSheets.copiedFromVersion,
           createdAt: setupSheets.createdAt,
@@ -323,6 +322,7 @@ export const setupSheetRouter = createRouter({
         generalNotes: input.generalNotes || null,
         version: newVersion,
         isLatest: true,
+        approvalStatus: "pending",   // Every edit requires re-approval
         copiedFromJobId: input.copiedFromJobId ?? null,
         copiedFromVersion: input.copiedFromVersion ?? null,
       }).returning();
@@ -410,5 +410,34 @@ export const setupSheetRouter = createRouter({
           eq(setupSheets.isLatest, true)
         ))
         .orderBy(desc(setupSheets.createdAt));
+    }),
+
+  // ─── APPROVE a setup (supervisor action) ───
+  approveSetup: publicQuery
+    .input(z.object({
+      setupSheetId: z.number(),
+      approverName: z.string().min(1),
+      status: z.enum(["approved", "rejected"]).default("approved"),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+
+      // Mark the target setup as approved/rejected
+      await db.update(setupSheets)
+        .set({
+          approvalStatus: input.status,
+          approvedBy: input.status === "approved" ? input.approverName : null,
+          approvedAt: input.status === "approved" ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(setupSheets.id, input.setupSheetId));
+
+      return {
+        success: true,
+        message: input.status === "approved"
+          ? "Setup approved and published to operators"
+          : "Setup rejected — operator must revise",
+        status: input.status,
+      };
     }),
 });

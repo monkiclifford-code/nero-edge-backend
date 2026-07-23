@@ -8,7 +8,7 @@ import {
   Lightbulb, Brain, Award, Camera, Plus, Trash2, Save,
   Pencil, Upload, X, Aperture, History, User, Clock,
   RotateCcw, ArrowRight, Package, Copy, BookOpen,
-  Image, Wrench, Anchor
+  Image, Wrench, Anchor, ShieldCheck, ShieldAlert
 } from "lucide-react";
 
 // ─── Types ───
@@ -89,6 +89,19 @@ export default function SetupSheet() {
     },
     onError: (err) => {
       setErrorMsg("Save failed: " + err.message);
+      setTimeout(() => setErrorMsg(""), 5000);
+    },
+  });
+
+  // ─── tRPC: Approve mutation (supervisor) ───
+  const approveMutation = trpc.setupSheet.approveSetup.useMutation({
+    onSuccess: (data) => {
+      setSavedMsg(data.message);
+      setupQuery.refetch();
+      setTimeout(() => setSavedMsg(""), 4000);
+    },
+    onError: (err) => {
+      setErrorMsg("Approval failed: " + err.message);
       setTimeout(() => setErrorMsg(""), 5000);
     },
   });
@@ -436,6 +449,27 @@ export default function SetupSheet() {
               <History className="h-4 w-4" /> V{dbSetup.version}
             </button>
           )}
+          {dbSetup?.approvalStatus === "pending" && (
+            <button
+              className="forge-btn-primary flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 border-emerald-500"
+              onClick={() => {
+                if (!operator) return;
+                approveMutation.mutate({
+                  setupSheetId: dbSetup.id,
+                  approverName: operator.name,
+                  status: "approved",
+                });
+              }}
+              disabled={approveMutation.isPending}
+            >
+              {approveMutation.isPending ? (
+                <RotateCcw className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-4 w-4" />
+              )}
+              {approveMutation.isPending ? "Approving..." : "Approve Setup"}
+            </button>
+          )}
           {editing ? (
             <button
               className="forge-btn-primary flex items-center gap-2"
@@ -567,14 +601,28 @@ export default function SetupSheet() {
 
         {/* ─── Setup Metadata Card ─── */}
         {dbSetup && (
-          <div className="forge-card border-l-4 border-l-blue-500">
+          <div className={`forge-card border-l-4 ${dbSetup.approvalStatus === "approved" ? "border-l-emerald-500" : dbSetup.approvalStatus === "rejected" ? "border-l-rose-500" : "border-l-amber-500"}`}>
             <div className="forge-card-body">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <User className="h-4 w-4 text-blue-400" />
                 <span className="text-sm font-bold text-white/80">Setup Record</span>
                 <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
                   v{dbSetup.version}
                 </span>
+                {dbSetup.approvalStatus === "approved" ? (
+                  <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" /> Approved
+                    {dbSetup.approvedBy && <span className="text-emerald-400/60">by {dbSetup.approvedBy}</span>}
+                  </span>
+                ) : dbSetup.approvalStatus === "rejected" ? (
+                  <span className="text-xs bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldAlert className="h-3 w-3" /> Rejected
+                  </span>
+                ) : (
+                  <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldAlert className="h-3 w-3" /> Pending Approval
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
@@ -593,6 +641,18 @@ export default function SetupSheet() {
                   <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Status</p>
                   <p className="font-semibold text-emerald-400">Latest</p>
                 </div>
+                {dbSetup.approvedBy && (
+                  <div>
+                    <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Approved By</p>
+                    <p className="font-semibold text-emerald-400">{dbSetup.approvedBy}</p>
+                  </div>
+                )}
+                {dbSetup.approvedAt && (
+                  <div>
+                    <p className="text-xs text-white/40 uppercase tracking-wider font-semibold">Approved At</p>
+                    <p className="font-semibold text-white/80">{new Date(dbSetup.approvedAt).toLocaleString()}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

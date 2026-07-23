@@ -29,6 +29,7 @@ export const severityEnum = pgEnum("severity", ["critical", "major", "minor", "o
 export const foundryStatusEnum = pgEnum("foundry_status", ["open", "in_progress", "resolved", "closed"]);
 export const predictionStatusEnum = pgEnum("prediction_status", ["pending", "processing", "completed", "failed"]);
 export const batchStatusEnum = pgEnum("batch_status", ["poured", "cooling", "fettled", "inspected", "shipped"]);
+export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected"]);
 
 // ===== OPERATORS =====
 export const operators = pgTable("operators", {
@@ -230,6 +231,9 @@ export const setupSheets = pgTable("setup_sheets", {
   generalNotes: text("general_notes"),       // Setup notes
   version: integer("version").notNull().default(1),
   isLatest: boolean("is_latest").notNull().default(true),
+  approvalStatus: approvalStatusEnum("approval_status").notNull().default("pending"),
+  approvedBy: varchar("approved_by", { length: 100 }),
+  approvedAt: timestamp("approved_at"),
   copiedFromJobId: integer("copied_from_job_id"),
   copiedFromVersion: integer("copied_from_version"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -250,6 +250,10 @@ CREATE TABLE IF NOT EXISTS setup_versions (
 DO $$ BEGIN
   ALTER TABLE setup_sheets ADD COLUMN IF NOT EXISTS copied_from_job_id INTEGER;
   ALTER TABLE setup_sheets ADD COLUMN IF NOT EXISTS copied_from_version INTEGER;
+  -- Approval workflow: existing data defaults to 'approved' so nothing breaks
+  ALTER TABLE setup_sheets ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'approved';
+  ALTER TABLE setup_sheets ADD COLUMN IF NOT EXISTS approved_by VARCHAR(100);
+  ALTER TABLE setup_sheets ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
 EXCEPTION WHEN others THEN
   RAISE NOTICE 'setup_sheets columns may already exist';
 END $$;

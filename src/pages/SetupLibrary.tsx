@@ -4,7 +4,7 @@ import { trpc } from "@/providers/trpc";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   Search, Package, Clock, User, Tag, RotateCcw,
-  ArrowRight, X, BookOpen, Copy
+  ArrowRight, X, BookOpen, Copy, ShieldCheck, ShieldAlert
 } from "lucide-react";
 
 export default function SetupLibrary() {
@@ -125,10 +125,23 @@ export default function SetupLibrary() {
                   <span className="text-[9px] font-semibold text-emerald-400 uppercase tracking-wider">Latest</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-sm font-bold text-white/90">{setup.partNumber}</span>
                     <span className="text-[10px] text-white/30">Rev {setup.revision}</span>
                     <span className="text-[10px] text-white/30">Job: {setup.jobNumber}</span>
+                    {setup.approvalStatus === "approved" ? (
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <ShieldCheck className="h-2.5 w-2.5" /> Approved
+                      </span>
+                    ) : setup.approvalStatus === "rejected" ? (
+                      <span className="text-[10px] bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <ShieldAlert className="h-2.5 w-2.5" /> Rejected
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <ShieldAlert className="h-2.5 w-2.5" /> Pending
+                      </span>
+                    )}
                     {setup.copiedFromJobId && (
                       <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Copy className="h-2.5 w-2.5" /> From Job #{setup.copiedFromJobId}
