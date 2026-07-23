@@ -200,7 +200,7 @@ export default function FoundryNCRPage() {
       setError(err.message || "Failed to save NCR.");
     }
     setIsSubmitting(false);
-  }, [operator, partNumber, problemDescription, defectType, jobId, ncrType, severity, rootCause, correctiveAction, scrapQuantified, scrapCost, images, createNcr, attachImage]);
+  }, [operator, partNumber, problemDescription, defectType, jobId, ncrType, severity, rootCause, correctiveAction, scrapQuantified, scrapCost, images, saveNcr, attachImage]);
 
   // ─── Success Screen ───
   if (submittedNcrId) {
