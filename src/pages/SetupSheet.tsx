@@ -7,7 +7,8 @@ import {
   FileText, ClipboardList, AlertTriangle, CheckCircle2,
   Lightbulb, Brain, Award, Camera, Plus, Trash2, Save,
   Pencil, Upload, X, Aperture, History, User, Clock,
-  RotateCcw, ArrowRight, Package, Copy
+  RotateCcw, ArrowRight, Package, Copy, BookOpen,
+  Image, Wrench, Anchor
 } from "lucide-react";
 
 // ─── Types ───
@@ -420,13 +421,19 @@ export default function SetupSheet() {
       showBack
       onBack={() => navigate("/job-entry")}
       action={
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            className="forge-btn-secondary flex items-center gap-2"
+            onClick={() => navigate("/setup-library")}
+          >
+            <BookOpen className="h-4 w-4" /> Library
+          </button>
           {dbSetup && (
             <button
               className="forge-btn-secondary flex items-center gap-2"
               onClick={() => setShowVersions(!showVersions)}
             >
-              <History className="h-4 w-4" /> Versions ({dbSetup.version})
+              <History className="h-4 w-4" /> V{dbSetup.version}
             </button>
           )}
           {editing ? (
@@ -598,23 +605,36 @@ export default function SetupSheet() {
               <h2 className="forge-card-title flex items-center gap-2">
                 <History className="h-4 w-4 text-purple-400" />
                 Version History
+                <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">{dbSetup.versions.length} snapshot(s)</span>
               </h2>
             </div>
             <div className="forge-card-body space-y-2">
-              {dbSetup.versions.map((v) => (
-                <div key={v.id} className="flex items-center gap-3 p-2 rounded-lg bg-[hsl(220,14%,13%)] border border-[hsl(220,14%,16%)]">
-                  <div className="h-8 w-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs font-bold text-purple-400">v{v.version}</span>
+              {dbSetup.versions.map((v) => {
+                const snap = (() => { try { return JSON.parse(v.snapshotData); } catch { return null; } })();
+                return (
+                  <div key={v.id} className="p-3 rounded-lg bg-[hsl(220,14%,13%)] border border-[hsl(220,14%,16%)]">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="h-8 w-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-purple-400">v{v.version}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white/80">{v.changeSummary || `Version ${v.version}`}</p>
+                        <p className="text-xs text-white/40 flex items-center gap-1">
+                          <User className="h-3 w-3" /> {v.operatorName}
+                          <Clock className="h-3 w-3 ml-2" /> {new Date(v.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    {snap && (
+                      <div className="flex items-center gap-3 text-[10px] text-white/30 pl-11">
+                        {typeof snap.imageCount === 'number' && <span className="flex items-center gap-0.5"><Image className="h-3 w-3" /> {snap.imageCount} photo{snap.imageCount !== 1 ? 's' : ''}</span>}
+                        {typeof snap.toolCount === 'number' && <span className="flex items-center gap-0.5"><Wrench className="h-3 w-3" /> {snap.toolCount} tool{snap.toolCount !== 1 ? 's' : ''}</span>}
+                        {typeof snap.workholdingCount === 'number' && <span className="flex items-center gap-0.5"><Anchor className="h-3 w-3" /> {snap.workholdingCount} fixture{snap.workholdingCount !== 1 ? 's' : ''}</span>}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white/80">{v.changeSummary || `Version ${v.version}`}</p>
-                    <p className="text-xs text-white/40 flex items-center gap-1">
-                      <User className="h-3 w-3" /> {v.operatorName}
-                      <Clock className="h-3 w-3 ml-2" /> {new Date(v.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

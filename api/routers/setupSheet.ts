@@ -262,7 +262,14 @@ export const setupSheetRouter = createRouter({
         setupSheetId = existing.id;
         newVersion = existing.version + 1;
 
-        // Save version snapshot BEFORE updating
+        // Save FULL version snapshot BEFORE updating
+        const oldTools = await db.select().from(setupTools)
+          .where(eq(setupTools.setupSheetId, existing.id));
+        const oldWorkholding = await db.select().from(setupWorkholding)
+          .where(eq(setupWorkholding.setupSheetId, existing.id));
+        const oldImages = await db.select().from(setupSheetImages)
+          .where(eq(setupSheetImages.setupSheetId, existing.id));
+
         await db.insert(setupVersions).values({
           setupSheetId: existing.id,
           version: existing.version,
@@ -273,6 +280,11 @@ export const setupSheetRouter = createRouter({
             programNotes: existing.programNotes,
             generalNotes: existing.generalNotes,
             updatedAt: existing.updatedAt,
+            toolCount: oldTools.length,
+            workholdingCount: oldWorkholding.length,
+            imageCount: oldImages.length,
+            tools: oldTools.map(t => ({ number: t.toolNumber, description: t.description, offset: t.offset })),
+            workholding: oldWorkholding.map(w => ({ label: w.label, value: w.value })),
           }),
         });
 
