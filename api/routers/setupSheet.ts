@@ -30,8 +30,8 @@ const annotationInput = z.object({
   color: z.string().min(1),
   points: z.array(pointInput),
   text: z.string().optional(),
-  number: z.number().optional(),
-  strokeWidth: z.number().optional(),
+  number: z.number().nullable().optional(),
+  strokeWidth: z.number().nullable().optional(),
 });
 
 const imageInput = z.object({
