@@ -258,6 +258,19 @@ EXCEPTION WHEN others THEN
   RAISE NOTICE 'setup_sheets columns may already exist';
 END $$;
 
+-- ─── Add version control columns to existing foundry_ncrs ───
+DO $$ BEGIN
+  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS is_latest BOOLEAN NOT NULL DEFAULT true;
+  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'approved';
+  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_by VARCHAR(100);
+  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
+  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS change_summary TEXT;
+  ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'foundry_ncrs columns may already exist';
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_job_id ON setup_sheets(job_id);
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_part_number ON setup_sheets(part_number);
 CREATE INDEX IF NOT EXISTS idx_setup_sheets_is_latest ON setup_sheets(is_latest);

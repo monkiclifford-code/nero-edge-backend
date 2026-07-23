@@ -2,19 +2,23 @@ import { z } from "zod";
 import { createRouter, publicQuery } from "../middleware";
 import { getDb } from "../queries/connection";
 import {
-  foundryNcrs, foundryNcrImages, foundryDefects,
+  foundryNcrs, foundryNcrImages, foundryDefects, foundryNcrVersions,
   castingBatches, aiVisualPredictions, jobs, operators,
   FOUNDRY_DEFECT_TYPES, NCR_CLASSIFICATIONS,
 } from "@db/schema";
-import { eq, desc, sql, count, like, and, gte } from "drizzle-orm";
+import { eq, desc, sql, count, like, and, gte, inArray } from "drizzle-orm";
 
 export const foundryRouter = createRouter({
-  // ─── Create Foundry NCR ───
-  createNcr: publicQuery
+
+  // ═══════════════════════════════════════════════════════════
+  // SAVE NCR — with version control (create or update)
+  // ═══════════════════════════════════════════════════════════
+  saveNcr: publicQuery
     .input(
       z.object({
         jobId: z.number().positive(),
         operatorId: z.number().positive(),
+        operatorName: z.string(),
         castingBatchId: z.number().positive().optional(),
         ncrType: z.enum(NCR_CLASSIFICATIONS).default("foundry"),
         defectType: z.enum(FOUNDRY_DEFECT_TYPES),
@@ -22,71 +26,160 @@ export const foundryRouter = createRouter({
         rootCause: z.string().optional(),
         correctiveAction: z.string().optional(),
         severity: z.enum(["critical", "major", "minor", "observation"]).default("major"),
+        status: z.enum(["open", "in_progress", "resolved", "closed"]).default("open"),
         scrapQuantified: z.boolean().default(false),
         scrapCost: z.number().optional(),
+        changeSummary: z.string().optional(),
+        // For editing existing NCR
+        existingNcrId: z.number().optional(),
       })
     )
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(foundryNcrs).values({
+      let newVersion = 1;
+      let previousVersion = 0;
+
+      if (input.existingNcrId) {
+        // ─── UPDATE: Archive existing, create new version ───
+        const [existing] = await db.select().from(foundryNcrs)
+          .where(eq(foundryNcrs.id, input.existingNcrId))
+          .limit(1);
+
+        if (!existing) throw new Error("NCR not found");
+
+        previousVersion = existing.version;
+        newVersion = existing.version + 1;
+
+        // Get old images for snapshot
+        const oldImages = await db.select().from(foundryNcrImages)
+          .where(eq(foundryNcrImages.foundryNcrId, existing.id));
+
+        // Save version snapshot
+        await db.insert(foundryNcrVersions).values({
+          foundryNcrId: existing.id,
+          version: existing.version,
+          operatorId: input.operatorId,
+          operatorName: input.operatorName,
+          changeSummary: input.changeSummary || `Updated to version ${newVersion}`,
+          snapshotData: JSON.stringify({
+            problemDescription: existing.problemDescription,
+            rootCause: existing.rootCause,
+            correctiveAction: existing.correctiveAction,
+            severity: existing.severity,
+            status: existing.status,
+            scrapQuantified: existing.scrapQuantified,
+            scrapCost: existing.scrapCost,
+            imageCount: oldImages.length,
+            updatedAt: existing.updatedAt,
+          }),
+        });
+
+        // Mark old as not latest
+        await db.update(foundryNcrs)
+          .set({ isLatest: false })
+          .where(eq(foundryNcrs.id, existing.id));
+
+        // Delete old images
+        await db.delete(foundryNcrImages)
+          .where(eq(foundryNcrImages.foundryNcrId, existing.id));
+      }
+
+      // ─── Create new NCR record ───
+      const [ncr] = await db.insert(foundryNcrs).values({
         jobId: input.jobId,
         operatorId: input.operatorId,
-        castingBatchId: input.castingBatchId ?? 0,
+        castingBatchId: input.castingBatchId ?? null,
         ncrType: input.ncrType,
         defectType: input.defectType,
         problemDescription: input.problemDescription,
         rootCause: input.rootCause ?? null,
         correctiveAction: input.correctiveAction ?? null,
         severity: input.severity,
+        status: input.status,
         scrapQuantified: input.scrapQuantified,
         scrapCost: input.scrapCost?.toString() ?? null,
-      });
-      const insertedId = result[0]?.insertId;
-      return { success: true, foundryNcrId: Number(insertedId) };
+        version: newVersion,
+        isLatest: true,
+        approvalStatus: "pending",
+        updatedBy: input.operatorName,
+        changeSummary: input.changeSummary || null,
+      }).returning();
+
+      return {
+        success: true,
+        foundryNcrId: ncr.id,
+        version: newVersion,
+        previousVersion,
+        message: previousVersion > 0
+          ? `NCR updated to version ${newVersion}`
+          : `NCR created (version ${newVersion})`,
+      };
     }),
 
-  // ─── Get All Foundry NCRs ───
-  getAllNcrs: publicQuery.query(async () => {
-    const db = getDb();
-    const results = await db
-      .select({
-        id: foundryNcrs.id,
-        jobId: foundryNcrs.jobId,
-        operatorId: foundryNcrs.operatorId,
-        ncrType: foundryNcrs.ncrType,
-        defectType: foundryNcrs.defectType,
-        problemDescription: foundryNcrs.problemDescription,
-        rootCause: foundryNcrs.rootCause,
-        correctiveAction: foundryNcrs.correctiveAction,
-        severity: foundryNcrs.severity,
-        status: foundryNcrs.status,
-        scrapQuantified: foundryNcrs.scrapQuantified,
-        scrapCost: foundryNcrs.scrapCost,
-        createdAt: foundryNcrs.createdAt,
-        jobNumber: jobs.jobNumber,
-        partNumber: jobs.partNumber,
-        operatorName: operators.name,
-      })
-      .from(foundryNcrs)
-      .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
-      .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
-      .orderBy(desc(foundryNcrs.createdAt));
-    return results;
-  }),
-
-  // ─── Get Foundry NCR by ID ───
+  // ═══════════════════════════════════════════════════════════
+  // GET NCR by ID — returns latest version with images
+  // ═══════════════════════════════════════════════════════════
   getNcrById: publicQuery
     .input(z.object({ id: z.number().positive() }))
     .query(async ({ input }) => {
       const db = getDb();
+
+      // Get the NCR along with job/operator info
       const [ncr] = await db
-        .select()
+        .select({
+          id: foundryNcrs.id,
+          jobId: foundryNcrs.jobId,
+          operatorId: foundryNcrs.operatorId,
+          castingBatchId: foundryNcrs.castingBatchId,
+          ncrType: foundryNcrs.ncrType,
+          defectType: foundryNcrs.defectType,
+          problemDescription: foundryNcrs.problemDescription,
+          rootCause: foundryNcrs.rootCause,
+          correctiveAction: foundryNcrs.correctiveAction,
+          severity: foundryNcrs.severity,
+          status: foundryNcrs.status,
+          scrapQuantified: foundryNcrs.scrapQuantified,
+          scrapCost: foundryNcrs.scrapCost,
+          version: foundryNcrs.version,
+          isLatest: foundryNcrs.isLatest,
+          approvalStatus: foundryNcrs.approvalStatus,
+          approvedBy: foundryNcrs.approvedBy,
+          approvedAt: foundryNcrs.approvedAt,
+          changeSummary: foundryNcrs.changeSummary,
+          updatedBy: foundryNcrs.updatedBy,
+          createdAt: foundryNcrs.createdAt,
+          updatedAt: foundryNcrs.updatedAt,
+          jobNumber: jobs.jobNumber,
+          partNumber: jobs.partNumber,
+          materialNumber: jobs.materialNumber,
+          revision: jobs.revision,
+          operatorName: operators.name,
+        })
         .from(foundryNcrs)
-        .where(eq(foundryNcrs.id, input.id));
-      return ncr ?? null;
+        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .where(eq(foundryNcrs.id, input.id))
+        .limit(1);
+
+      if (!ncr) return null;
+
+      // Get images
+      const images = await db.select().from(foundryNcrImages)
+        .where(eq(foundryNcrImages.foundryNcrId, ncr.id))
+        .orderBy(desc(foundryNcrImages.createdAt));
+
+      // Get version history
+      const versions = await db.select().from(foundryNcrVersions)
+        .where(eq(foundryNcrVersions.foundryNcrId, ncr.id))
+        .orderBy(desc(foundryNcrVersions.createdAt))
+        .limit(10);
+
+      return { ...ncr, images, versions };
     }),
 
-  // ─── Get NCRs by Part Number ───
+  // ═══════════════════════════════════════════════════════════
+  // GET NCRs by Part Number — returns LATEST APPROVED only
+  // ═══════════════════════════════════════════════════════════
   getNcrsByPart: publicQuery
     .input(z.object({ partNumber: z.string() }))
     .query(async ({ input }) => {
@@ -96,9 +189,16 @@ export const foundryRouter = createRouter({
           id: foundryNcrs.id,
           defectType: foundryNcrs.defectType,
           problemDescription: foundryNcrs.problemDescription,
+          rootCause: foundryNcrs.rootCause,
+          correctiveAction: foundryNcrs.correctiveAction,
           severity: foundryNcrs.severity,
           status: foundryNcrs.status,
+          version: foundryNcrs.version,
+          approvalStatus: foundryNcrs.approvalStatus,
+          scrapQuantified: foundryNcrs.scrapQuantified,
+          scrapCost: foundryNcrs.scrapCost,
           createdAt: foundryNcrs.createdAt,
+          updatedAt: foundryNcrs.updatedAt,
           jobNumber: jobs.jobNumber,
           partNumber: jobs.partNumber,
           operatorName: operators.name,
@@ -106,12 +206,18 @@ export const foundryRouter = createRouter({
         .from(foundryNcrs)
         .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
         .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
-        .where(eq(jobs.partNumber, input.partNumber))
+        .where(and(
+          eq(jobs.partNumber, input.partNumber),
+          eq(foundryNcrs.isLatest, true),
+          eq(foundryNcrs.approvalStatus, "approved"),
+        ))
         .orderBy(desc(foundryNcrs.createdAt));
       return results;
     }),
 
-  // ─── Search NCRs with filters ───
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH NCRs — library with filters (only latest)
+  // ═══════════════════════════════════════════════════════════
   searchNcrs: publicQuery
     .input(
       z.object({
@@ -130,7 +236,8 @@ export const foundryRouter = createRouter({
     )
     .query(async ({ input }) => {
       const db = getDb();
-      const conditions = [];
+      const conditions = [eq(foundryNcrs.isLatest, true)];
+
       if (input.partNumber) conditions.push(like(jobs.partNumber, `%${input.partNumber}%`));
       if (input.jobNumber) conditions.push(like(jobs.jobNumber, `%${input.jobNumber}%`));
       if (input.ncrNumber) conditions.push(eq(foundryNcrs.id, Number(input.ncrNumber)));
@@ -140,7 +247,7 @@ export const foundryRouter = createRouter({
       if (input.dateFrom) conditions.push(gte(foundryNcrs.createdAt, new Date(input.dateFrom)));
       if (input.dateTo) conditions.push(sql`${foundryNcrs.createdAt} <= ${new Date(input.dateTo)}`);
 
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const whereClause = and(...conditions);
 
       const results = await db
         .select({
@@ -154,10 +261,16 @@ export const foundryRouter = createRouter({
           status: foundryNcrs.status,
           scrapQuantified: foundryNcrs.scrapQuantified,
           scrapCost: foundryNcrs.scrapCost,
+          version: foundryNcrs.version,
+          approvalStatus: foundryNcrs.approvalStatus,
+          approvedBy: foundryNcrs.approvedBy,
+          approvedAt: foundryNcrs.approvedAt,
           createdAt: foundryNcrs.createdAt,
           updatedAt: foundryNcrs.updatedAt,
           jobNumber: jobs.jobNumber,
           partNumber: jobs.partNumber,
+          materialNumber: jobs.materialNumber,
+          revision: jobs.revision,
           operatorName: operators.name,
         })
         .from(foundryNcrs)
@@ -178,7 +291,50 @@ export const foundryRouter = createRouter({
       return { results, total: Number(countResult[0]?.total ?? 0) };
     }),
 
-  // ─── Update NCR Status ───
+  // ═══════════════════════════════════════════════════════════
+  // APPROVE NCR — supervisor sign-off
+  // ═══════════════════════════════════════════════════════════
+  approveNcr: publicQuery
+    .input(z.object({
+      ncrId: z.number().positive(),
+      approverName: z.string().min(1),
+      status: z.enum(["approved", "rejected"]).default("approved"),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(foundryNcrs)
+        .set({
+          approvalStatus: input.status,
+          approvedBy: input.status === "approved" ? input.approverName : null,
+          approvedAt: input.status === "approved" ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(foundryNcrs.id, input.ncrId));
+
+      return {
+        success: true,
+        message: input.status === "approved"
+          ? "NCR approved and published"
+          : "NCR rejected — needs revision",
+        status: input.status,
+      };
+    }),
+
+  // ═══════════════════════════════════════════════════════════
+  // GET version history for an NCR
+  // ═══════════════════════════════════════════════════════════
+  getVersions: publicQuery
+    .input(z.object({ ncrId: z.number().positive() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      return db.select().from(foundryNcrVersions)
+        .where(eq(foundryNcrVersions.foundryNcrId, input.ncrId))
+        .orderBy(desc(foundryNcrVersions.createdAt));
+    }),
+
+  // ═══════════════════════════════════════════════════════════
+  // UPDATE NCR Status (workflow state)
+  // ═══════════════════════════════════════════════════════════
   updateStatus: publicQuery
     .input(
       z.object({
@@ -188,14 +344,15 @@ export const foundryRouter = createRouter({
     )
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db
-        .update(foundryNcrs)
-        .set({ status: input.status })
+      await db.update(foundryNcrs)
+        .set({ status: input.status, updatedAt: new Date() })
         .where(eq(foundryNcrs.id, input.id));
       return { success: true };
     }),
 
-  // ─── Attach Image to Foundry NCR ───
+  // ═══════════════════════════════════════════════════════════
+  // Attach Image to Foundry NCR
+  // ═══════════════════════════════════════════════════════════
   attachImage: publicQuery
     .input(
       z.object({
@@ -210,7 +367,7 @@ export const foundryRouter = createRouter({
     )
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(foundryNcrImages).values({
+      const [img] = await db.insert(foundryNcrImages).values({
         foundryNcrId: input.foundryNcrId,
         imageUrl: input.imageUrl,
         thumbnailUrl: input.thumbnailUrl ?? null,
@@ -218,24 +375,25 @@ export const foundryRouter = createRouter({
         fileSize: input.fileSize ?? null,
         mimeType: input.mimeType ?? null,
         metadata: input.metadata ?? null,
-      });
-      return { success: true, imageId: Number(result[0]?.insertId) };
+      }).returning({ id: foundryNcrImages.id });
+      return { success: true, imageId: img.id };
     }),
 
-  // ─── Get Images for Foundry NCR ───
+  // ═══════════════════════════════════════════════════════════
+  // Get Images for Foundry NCR
+  // ═══════════════════════════════════════════════════════════
   getImages: publicQuery
     .input(z.object({ foundryNcrId: z.number().positive() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const results = await db
-        .select()
-        .from(foundryNcrImages)
+      return db.select().from(foundryNcrImages)
         .where(eq(foundryNcrImages.foundryNcrId, input.foundryNcrId))
         .orderBy(desc(foundryNcrImages.createdAt));
-      return results;
     }),
 
-  // ─── Create Defect Record ───
+  // ═══════════════════════════════════════════════════════════
+  // Create Defect Record
+  // ═══════════════════════════════════════════════════════════
   createDefect: publicQuery
     .input(
       z.object({
@@ -268,20 +426,21 @@ export const foundryRouter = createRouter({
       return { success: true, defectId: Number(result[0]?.insertId) };
     }),
 
-  // ─── Get Defects by Part ───
+  // ═══════════════════════════════════════════════════════════
+  // Get Defects by Part
+  // ═══════════════════════════════════════════════════════════
   getDefectsByPart: publicQuery
     .input(z.object({ partNumber: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const results = await db
-        .select()
-        .from(foundryDefects)
+      return db.select().from(foundryDefects)
         .where(eq(foundryDefects.partNumber, input.partNumber))
         .orderBy(desc(foundryDefects.createdAt));
-      return results;
     }),
 
-  // ─── Get All Defects (Visual History) ───
+  // ═══════════════════════════════════════════════════════════
+  // Get All Defects (Visual History)
+  // ═══════════════════════════════════════════════════════════
   getAllDefects: publicQuery
     .input(
       z.object({
@@ -302,29 +461,29 @@ export const foundryRouter = createRouter({
 
       const whereClause = filters.length > 0 ? and(...filters) : undefined;
 
-      const results = await db
-        .select({
-          id: foundryDefects.id,
-          partNumber: foundryDefects.partNumber,
-          defectType: foundryDefects.defectType,
-          description: foundryDefects.description,
-          location: foundryDefects.location,
-          confidence: foundryDefects.confidence,
-          aiPredicted: foundryDefects.aiPredicted,
-          isRepeat: foundryDefects.isRepeat,
-          createdAt: foundryDefects.createdAt,
-          imageUrl: foundryNcrImages.imageUrl,
-          foundryNcrId: foundryDefects.foundryNcrId,
-        })
+      return db.select({
+        id: foundryDefects.id,
+        partNumber: foundryDefects.partNumber,
+        defectType: foundryDefects.defectType,
+        description: foundryDefects.description,
+        location: foundryDefects.location,
+        confidence: foundryDefects.confidence,
+        aiPredicted: foundryDefects.aiPredicted,
+        isRepeat: foundryDefects.isRepeat,
+        createdAt: foundryDefects.createdAt,
+        imageUrl: foundryNcrImages.imageUrl,
+        foundryNcrId: foundryDefects.foundryNcrId,
+      })
         .from(foundryDefects)
         .leftJoin(foundryNcrImages, eq(foundryDefects.imageId, foundryNcrImages.id))
         .where(whereClause)
         .orderBy(desc(foundryDefects.createdAt))
         .limit(input?.limit ?? 50);
-      return results;
     }),
 
-  // ─── Create Casting Batch ───
+  // ═══════════════════════════════════════════════════════════
+  // Create Casting Batch
+  // ═══════════════════════════════════════════════════════════
   createBatch: publicQuery
     .input(
       z.object({
@@ -353,7 +512,9 @@ export const foundryRouter = createRouter({
       return { success: true, batchId: Number(result[0]?.insertId) };
     }),
 
-  // ─── Get Casting Batches ───
+  // ═══════════════════════════════════════════════════════════
+  // Get Casting Batches
+  // ═══════════════════════════════════════════════════════════
   getBatches: publicQuery
     .input(z.object({ partNumber: z.string().optional() }).optional())
     .query(async ({ input }) => {

@@ -32,6 +32,7 @@ import Dashboard from './pages/Dashboard'
 import FoundryDashboardPage from './pages/FoundryDashboardPage'
 import FoundryNCRPage from './pages/FoundryNCRPage'
 import FoundryNCRHistory from './pages/FoundryNCRHistory'
+import FoundryNcrLibrary from './pages/FoundryNcrLibrary'
 
 export default function App() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
       <Route path="/foundry-dashboard" element={<FoundryDashboardPage />} />
       <Route path="/foundry-ncr" element={<FoundryNCRPage />} />
       <Route path="/foundry-ncr-history" element={<FoundryNCRHistory />} />
+      <Route path="/foundry-ncr-library" element={<FoundryNcrLibrary />} />
     </Routes>
     </ErrorBoundary>
   )

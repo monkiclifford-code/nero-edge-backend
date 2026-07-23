@@ -12,7 +12,8 @@ import {
 import {
   Camera, Upload, Brain, Save, Loader2, X, AlertTriangle,
   CheckCircle2, Microscope, Trash2, Sparkles,
-  QrCode, Monitor, ImageIcon,
+  QrCode, Monitor, ImageIcon, ShieldAlert, BookOpen,
+  Pencil, ShieldCheck,
 } from "lucide-react";
 import AIPredictionCard from "@/components/foundry/AIPredictionCard";
 import ConfidenceBadge from "@/components/foundry/ConfidenceBadge";
@@ -58,13 +59,17 @@ export default function FoundryNCRPage() {
   const [showCamera, setShowCamera] = useState(false);
   const [showQRPanel, setShowQRPanel] = useState(false);
 
-  // tRPC mutations
-  const createNcr = trpc.foundry.createNcr.useMutation();
+  // tRPC mutations (version-controlled)
+  const saveNcr = trpc.foundry.saveNcr.useMutation();
   const attachImage = trpc.foundry.attachImage.useMutation();
+  const approveNcr = trpc.foundry.approveNcr.useMutation();
 
   // Submit state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedNcrId, setSubmittedNcrId] = useState<number | null>(null);
+  const [submittedVersion, setSubmittedVersion] = useState(1);
+  const [editMode, setEditMode] = useState(false);
+  const [editNcrId, setEditNcrId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -144,6 +149,7 @@ export default function FoundryNCRPage() {
 
     try {
       let ncrId: number;
+      let ncrVersion = 1;
 
       if (isDemoMode()) {
         const result = demoApi.createFoundryNcr({
@@ -161,18 +167,22 @@ export default function FoundryNCRPage() {
           demoApi.attachFoundryImage({ foundryNcrId: ncrId, imageUrl: img.url, uploadedBy: operator.id });
         });
       } else {
-        // Real API call
-        const result = await createNcr.mutateAsync({
+        // Version-controlled save
+        const result = await saveNcr.mutateAsync({
           jobId: Number(jobId) || 1,
           operatorId: operator.id,
+          operatorName: operator.name,
           ncrType, defectType,
           problemDescription: problemDescription.trim(),
           rootCause: rootCause.trim() || undefined,
           correctiveAction: correctiveAction.trim() || undefined,
           severity, scrapQuantified,
           scrapCost: scrapCost ? parseFloat(scrapCost) : undefined,
+          existingNcrId: editMode && editNcrId ? editNcrId : undefined,
+          changeSummary: editMode ? `Edited by ${operator.name}` : `Initial NCR by ${operator.name}`,
         });
         ncrId = result.foundryNcrId;
+        ncrVersion = result.version;
         // Attach images
         for (const img of images) {
           await attachImage.mutateAsync({
@@ -183,6 +193,9 @@ export default function FoundryNCRPage() {
         }
       }
       setSubmittedNcrId(ncrId);
+      setSubmittedVersion(ncrVersion);
+      setEditMode(false);
+      setEditNcrId(null);
     } catch (err: any) {
       setError(err.message || "Failed to save NCR.");
     }
@@ -192,19 +205,33 @@ export default function FoundryNCRPage() {
   // ─── Success Screen ───
   if (submittedNcrId) {
     return (
-      <AppLayout title="Foundry NCR Created" subtitle="" showBack onBack={() => setSubmittedNcrId(null)}>
+      <AppLayout title={editMode ? "NCR Updated" : "Foundry NCR Created"} subtitle="" showBack onBack={() => setSubmittedNcrId(null)}>
         <div className="max-w-xl mx-auto py-12 text-center space-y-5">
           <div className="w-20 h-20 rounded-full bg-emerald-500/15 border-2 border-emerald-500/30 flex items-center justify-center mx-auto">
             <CheckCircle2 className="h-10 w-10 text-emerald-400" />
           </div>
-          <h2 className="text-2xl font-bold text-[hsl(220,14%,15%)]">Foundry NCR Submitted</h2>
-          <p className="text-sm text-[hsl(220,14%,55%)]">NCR #{submittedNcrId} has been logged successfully.</p>
+          <h2 className="text-2xl font-bold text-[hsl(220,14%,15%)]">
+            {editMode ? "NCR Updated" : "Foundry NCR Submitted"}
+          </h2>
+          <div className="space-y-2">
+            <p className="text-sm text-[hsl(220,14%,55%)]">NCR #{submittedNcrId} has been logged successfully.</p>
+            <div className="flex items-center justify-center gap-3">
+              <span className="text-xs bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full font-semibold">
+                Version {submittedVersion}
+              </span>
+              <span className="text-xs bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full font-semibold flex items-center gap-1">
+                <ShieldAlert className="h-3 w-3" /> Pending Approval
+              </span>
+            </div>
+            <p className="text-xs text-white/30">A supervisor must approve before this becomes the active NCR.</p>
+          </div>
           <div className="flex gap-3 justify-center pt-2">
             <button className="forge-btn-primary h-14 px-6" onClick={() => {
-              setSubmittedNcrId(null); setProblemDescription(""); setRootCause("");
+              setSubmittedNcrId(null); setEditMode(false); setEditNcrId(null);
+              setProblemDescription(""); setRootCause("");
               setCorrectiveAction(""); setImages([]); setScrapCost(""); setScrapQuantified(false);
             }}>Create Another NCR</button>
-            <button className="forge-btn-secondary h-14 px-6" onClick={() => navigate("/foundry-dashboard")}>View Dashboard</button>
+            <button className="forge-btn-secondary h-14 px-6" onClick={() => navigate("/foundry-ncr-library")}>NCR Library</button>
           </div>
         </div>
       </AppLayout>
@@ -212,7 +239,24 @@ export default function FoundryNCRPage() {
   }
 
   return (
-    <AppLayout title="Foundry NCR" subtitle="Create Non-Conformance Report with AI Vision" showBack onBack={() => navigate("/job-entry")}>
+    <AppLayout
+      title={editMode ? `Edit NCR #${editNcrId}` : "Foundry NCR"}
+      subtitle={editMode ? "Update existing NCR — creates new version" : "Create Non-Conformance Report with AI Vision"}
+      showBack
+      onBack={() => navigate("/job-entry")}
+      action={
+        <div className="flex gap-2">
+          <button className="forge-btn-secondary flex items-center gap-2" onClick={() => navigate("/foundry-ncr-library")}>
+            <BookOpen className="h-4 w-4" /> Library
+          </button>
+          {editMode && (
+            <button className="forge-btn-secondary flex items-center gap-2" onClick={() => { setEditMode(false); setEditNcrId(null); }}>
+              <X className="h-4 w-4" /> Cancel Edit
+            </button>
+          )}
+        </div>
+      }
+    >
       <div className="max-w-4xl mx-auto space-y-5 pb-8">
 
         {/* ── Section 1: Classification ── */}
@@ -467,7 +511,7 @@ export default function FoundryNCRPage() {
             ) : compressingCount > 0 ? (
               <><Loader2 className="h-6 w-6 animate-spin" /> Compressing {compressingCount}...</>
             ) : (
-              <><Save className="h-6 w-6" /> Save Foundry NCR {images.length > 0 && `(${images.length})`}</>
+              <><Save className="h-6 w-6" /> {editMode ? `Update NCR V${submittedVersion + 1}` : `Save Foundry NCR`} {images.length > 0 && `(${images.length})`}</>
             )}
           </button>
         </div>

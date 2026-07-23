@@ -149,8 +149,28 @@ export const foundryNcrs = pgTable("foundry_ncrs", {
   status: foundryStatusEnum("status").notNull().default("open"),
   scrapQuantified: boolean("scrap_quantified").default(false),
   scrapCost: decimal("scrap_cost", { precision: 12, scale: 2 }),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  // ── Version Control ──
+  version: integer("version").notNull().default(1),
+  isLatest: boolean("is_latest").notNull().default(true),
+  approvalStatus: approvalStatusEnum("approval_status").notNull().default("pending"),
+  approvedBy: varchar("approved_by", { length: 100 }),
+  approvedAt: timestamp("approved_at"),
+  changeSummary: text("change_summary"),
+  updatedBy: varchar("updated_by", { length: 100 }),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ===== FOUNDRY NCR VERSIONS (version history snapshots) =====
+export const foundryNcrVersions = pgTable("foundry_ncr_versions", {
+  id: serial("id").primaryKey(),
+  foundryNcrId: integer("foundry_ncr_id").notNull().references(() => foundryNcrs.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  operatorId: integer("operator_id").notNull().references(() => operators.id, { onDelete: "cascade" }),
+  operatorName: varchar("operator_name", { length: 100 }).notNull(),
+  changeSummary: text("change_summary"),
+  snapshotData: text("snapshot_data").notNull(), // Full JSON snapshot
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ===== FOUNDRY NCR IMAGES =====
