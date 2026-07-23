@@ -177,8 +177,8 @@ export const foundryNcrVersions = pgTable("foundry_ncr_versions", {
 export const foundryNcrImages = pgTable("foundry_ncr_images", {
   id: serial("id").primaryKey(),
   foundryNcrId: integer("foundry_ncr_id").notNull().references(() => foundryNcrs.id, { onDelete: "cascade" }),
-  imageUrl: varchar("image_url", { length: 500 }).notNull(),
-  thumbnailUrl: varchar("thumbnail_url", { length: 500 }),
+  imageUrl: text("image_url").notNull(),
+  thumbnailUrl: text("thumbnail_url"),
   uploadedBy: integer("uploaded_by").notNull().references(() => operators.id, { onDelete: "cascade" }),
   fileSize: integer("file_size"),
   mimeType: varchar("mime_type", { length: 50 }),

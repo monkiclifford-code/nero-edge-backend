@@ -267,6 +267,9 @@ DO $$ BEGIN
   ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
   ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS change_summary TEXT;
   ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);
+  -- Base64 images need TEXT instead of VARCHAR(500)
+  ALTER TABLE foundry_ncr_images ALTER COLUMN image_url TYPE TEXT;
+  ALTER TABLE foundry_ncr_images ALTER COLUMN thumbnail_url TYPE TEXT;
 EXCEPTION WHEN others THEN
   RAISE NOTICE 'foundry_ncrs columns may already exist';
 END $$;
