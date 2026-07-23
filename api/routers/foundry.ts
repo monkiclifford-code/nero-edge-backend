@@ -351,6 +351,88 @@ export const foundryRouter = createRouter({
     }),
 
   // ═══════════════════════════════════════════════════════════
+  // VISUAL HISTORY — gallery of all NCR images with NCR context
+  // ═══════════════════════════════════════════════════════════
+  getVisualHistory: publicQuery
+    .input(
+      z.object({
+        partNumber: z.string().optional(),
+        ncrNumber: z.string().optional(),
+        jobNumber: z.string().optional(),
+        materialNumber: z.string().optional(),
+        defectType: z.string().optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      const db = getDb();
+      const conditions = [eq(foundryNcrs.isLatest, true)];
+
+      if (input?.partNumber) conditions.push(like(jobs.partNumber, `%${input.partNumber}%`));
+      if (input?.ncrNumber) conditions.push(eq(foundryNcrs.id, Number(input.ncrNumber)));
+      if (input?.jobNumber) conditions.push(like(jobs.jobNumber, `%${input.jobNumber}%`));
+      if (input?.materialNumber) conditions.push(like(jobs.materialNumber ?? "", `%${input.materialNumber}%`));
+      if (input?.defectType) conditions.push(eq(foundryNcrs.defectType, input.defectType));
+      if (input?.dateFrom) conditions.push(gte(foundryNcrs.createdAt, new Date(input.dateFrom)));
+      if (input?.dateTo) conditions.push(sql`${foundryNcrs.createdAt} <= ${new Date(input.dateTo)}`);
+
+      const whereClause = and(...conditions);
+
+      // Get images joined with NCRs and jobs for full gallery data
+      const images = await db
+        .select({
+          imageId: foundryNcrImages.id,
+          imageUrl: foundryNcrImages.imageUrl,
+          thumbnailUrl: foundryNcrImages.thumbnailUrl,
+          mimeType: foundryNcrImages.mimeType,
+          fileSize: foundryNcrImages.fileSize,
+          imageCreatedAt: foundryNcrImages.createdAt,
+          ncrId: foundryNcrs.id,
+          jobId: foundryNcrs.jobId,
+          operatorId: foundryNcrs.operatorId,
+          defectType: foundryNcrs.defectType,
+          severity: foundryNcrs.severity,
+          problemDescription: foundryNcrs.problemDescription,
+          rootCause: foundryNcrs.rootCause,
+          correctiveAction: foundryNcrs.correctiveAction,
+          status: foundryNcrs.status,
+          scrapQuantified: foundryNcrs.scrapQuantified,
+          scrapCost: foundryNcrs.scrapCost,
+          version: foundryNcrs.version,
+          approvalStatus: foundryNcrs.approvalStatus,
+          ncrCreatedAt: foundryNcrs.createdAt,
+          jobNumber: jobs.jobNumber,
+          partNumber: jobs.partNumber,
+          materialNumber: jobs.materialNumber,
+          revision: jobs.revision,
+          operatorName: operators.name,
+        })
+        .from(foundryNcrImages)
+        .innerJoin(foundryNcrs, eq(foundryNcrImages.foundryNcrId, foundryNcrs.id))
+        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .where(whereClause)
+        .orderBy(desc(foundryNcrImages.createdAt))
+        .limit(input?.limit ?? 50)
+        .offset(input?.offset ?? 0);
+
+      const countResult = await db
+        .select({ total: count() })
+        .from(foundryNcrImages)
+        .innerJoin(foundryNcrs, eq(foundryNcrImages.foundryNcrId, foundryNcrs.id))
+        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .where(whereClause);
+
+      return {
+        images,
+        total: Number(countResult[0]?.total ?? 0),
+      };
+    }),
+
+  // ═══════════════════════════════════════════════════════════
   // Attach Image to Foundry NCR
   // ═══════════════════════════════════════════════════════════
   attachImage: publicQuery
