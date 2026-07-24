@@ -93,8 +93,26 @@ export default function FoundryNcrLibrary() {
   };
 
   // ─── DETAIL VIEW — Complete NCR Quality Document ───
-  if (selectedNcrId && ncrDetail.data) {
+  if (selectedNcrId) {
     const ncr = ncrDetail.data;
+
+    // Loading state while NCR details fetch
+    if (!ncr) {
+      return (
+        <AppLayout
+          title={`NCR #${selectedNcrId}`}
+          subtitle="Loading NCR details..."
+          showBack
+          onBack={() => setSelectedNcrId(null)}
+        >
+          <div className="max-w-5xl mx-auto py-16 text-center">
+            <RotateCcw className="h-10 w-10 text-orange-400 animate-spin mx-auto mb-4" />
+            <p className="text-sm text-white/40">Loading NCR #{selectedNcrId}...</p>
+          </div>
+        </AppLayout>
+      );
+    }
+
     const severityLabel = ncr.severity ? ncr.severity.charAt(0).toUpperCase() + ncr.severity.slice(1) : "Unknown";
     const defectLabel = ncr.defectType ? ncr.defectType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) : "Unknown";
 
