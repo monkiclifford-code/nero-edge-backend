@@ -105,6 +105,30 @@ export const foundryRouter = createRouter({
         changeSummary: input.changeSummary || null,
       }).returning();
 
+      // ─── Auto-create V1 snapshot for traceability ───
+      try {
+        await db.insert(foundryNcrVersions).values({
+          foundryNcrId: ncr.id,
+          version: newVersion,
+          operatorId: input.operatorId,
+          operatorName: input.operatorName,
+          changeSummary: input.changeSummary || `Initial NCR creation (version ${newVersion})`,
+          snapshotData: JSON.stringify({
+            problemDescription: input.problemDescription,
+            rootCause: input.rootCause ?? null,
+            correctiveAction: input.correctiveAction ?? null,
+            severity: input.severity,
+            status: input.status,
+            scrapQuantified: input.scrapQuantified,
+            scrapCost: input.scrapCost ?? null,
+            defectType: input.defectType,
+            imageCount: 0, // Images attached after NCR creation
+          }),
+        });
+      } catch (e) {
+        console.warn("[saveNcr] Could not create V1 snapshot:", e);
+      }
+
       return {
         success: true,
         foundryNcrId: ncr.id,
@@ -163,16 +187,26 @@ export const foundryRouter = createRouter({
 
       if (!ncr) return null;
 
-      // Get images
-      const images = await db.select().from(foundryNcrImages)
-        .where(eq(foundryNcrImages.foundryNcrId, ncr.id))
-        .orderBy(desc(foundryNcrImages.createdAt));
+      // Get images (safe — return empty array if table missing)
+      let images: any[] = [];
+      try {
+        images = await db.select().from(foundryNcrImages)
+          .where(eq(foundryNcrImages.foundryNcrId, ncr.id))
+          .orderBy(desc(foundryNcrImages.createdAt));
+      } catch (e) {
+        console.warn("[getNcrById] Could not fetch images:", e);
+      }
 
-      // Get version history
-      const versions = await db.select().from(foundryNcrVersions)
-        .where(eq(foundryNcrVersions.foundryNcrId, ncr.id))
-        .orderBy(desc(foundryNcrVersions.createdAt))
-        .limit(10);
+      // Get version history (safe — return empty array if table missing)
+      let versions: any[] = [];
+      try {
+        versions = await db.select().from(foundryNcrVersions)
+          .where(eq(foundryNcrVersions.foundryNcrId, ncr.id))
+          .orderBy(desc(foundryNcrVersions.createdAt))
+          .limit(10);
+      } catch (e) {
+        console.warn("[getNcrById] Could not fetch versions:", e);
+      }
 
       return { ...ncr, images, versions };
     }),

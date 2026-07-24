@@ -267,6 +267,19 @@ DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS approved_at TIMEST
 DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS change_summary TEXT; EXCEPTION WHEN others THEN RAISE NOTICE 'change_summary column issue'; END $$;
 DO $$ BEGIN ALTER TABLE foundry_ncrs ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100); EXCEPTION WHEN others THEN RAISE NOTICE 'updated_by column issue'; END $$;
 
+-- ─── Foundry NCR Versions table (version history) ───
+CREATE TABLE IF NOT EXISTS foundry_ncr_versions (
+  id SERIAL PRIMARY KEY,
+  foundry_ncr_id INTEGER NOT NULL REFERENCES foundry_ncrs(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  operator_id INTEGER NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
+  operator_name VARCHAR(100) NOT NULL,
+  change_summary TEXT,
+  snapshot_data TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_foundry_ncr_versions_ncr_id ON foundry_ncr_versions(foundry_ncr_id);
+
 -- ─── Ensure foundry_ncr_images can store base64 data ───
 DO $$ BEGIN ALTER TABLE foundry_ncr_images ALTER COLUMN image_url TYPE TEXT; EXCEPTION WHEN others THEN RAISE NOTICE 'image_url type issue'; END $$;
 DO $$ BEGIN ALTER TABLE foundry_ncr_images ALTER COLUMN thumbnail_url TYPE TEXT; EXCEPTION WHEN others THEN RAISE NOTICE 'thumbnail_url type issue'; END $$;
