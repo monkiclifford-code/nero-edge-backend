@@ -10,7 +10,10 @@ import {
   ExternalLink, BarChart3,
 } from "lucide-react";
 import FullscreenImageViewer from "@/components/foundry/FullscreenImageViewer";
-import { FOUNDRY_DEFECT_TYPES, SEVERITY_LEVELS } from "@/lib/foundryConstants";
+import {
+  FOUNDRY_DEFECT_TYPES, SEVERITY_LEVELS,
+  getDefectLabel, getDefectColor, getSeverityColor, getStatusColor,
+} from "@/lib/foundryConstants";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All Statuses" },
@@ -19,25 +22,6 @@ const STATUS_OPTIONS = [
   { value: "resolved", label: "Resolved" },
   { value: "closed", label: "Closed" },
 ];
-
-function getStatusColor(status: string) {
-  switch (status) {
-    case "open": return "text-rose-400 bg-rose-500/15 border-rose-500/30";
-    case "in_progress": return "text-amber-400 bg-amber-500/15 border-amber-500/30";
-    case "resolved": return "text-emerald-400 bg-emerald-500/15 border-emerald-500/30";
-    case "closed": return "text-white/40 bg-white/5 border-white/10";
-    default: return "text-white/40 bg-white/5 border-white/10";
-  }
-}
-
-function getSeverityColor(severity: string) {
-  switch (severity) {
-    case "critical": return "text-rose-400";
-    case "major": return "text-orange-400";
-    case "minor": return "text-amber-400";
-    default: return "text-white/40";
-  }
-}
 
 export default function FoundryNcrLibrary() {
   const navigate = useNavigate();
