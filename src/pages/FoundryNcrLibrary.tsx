@@ -97,7 +97,7 @@ export default function FoundryNcrLibrary() {
     const ncr = ncrDetail.data;
 
     // Loading state while NCR details fetch
-    if (!ncr) {
+    if (ncrDetail.isLoading) {
       return (
         <AppLayout
           title={`NCR #${selectedNcrId}`}
@@ -108,6 +108,26 @@ export default function FoundryNcrLibrary() {
           <div className="max-w-5xl mx-auto py-16 text-center">
             <RotateCcw className="h-10 w-10 text-orange-400 animate-spin mx-auto mb-4" />
             <p className="text-sm text-white/40">Loading NCR #{selectedNcrId}...</p>
+          </div>
+        </AppLayout>
+      );
+    }
+
+    // Not found or error
+    if (!ncr || ncrDetail.error) {
+      return (
+        <AppLayout
+          title={`NCR #${selectedNcrId}`}
+          subtitle="NCR not found"
+          showBack
+          onBack={() => setSelectedNcrId(null)}
+        >
+          <div className="max-w-5xl mx-auto py-16 text-center">
+            <AlertTriangle className="h-12 w-12 text-rose-400/40 mx-auto mb-4" />
+            <p className="text-lg font-bold text-white/80 mb-2">NCR #{selectedNcrId} not found</p>
+            <p className="text-sm text-white/40 mb-4">The NCR may have been deleted or the record is incomplete.</p>
+            <p className="text-xs text-white/20 mb-6">{ncrDetail.error?.message}</p>
+            <button className="forge-btn-primary" onClick={() => setSelectedNcrId(null)}>Back to Library</button>
           </div>
         </AppLayout>
       );

@@ -156,8 +156,8 @@ export const foundryRouter = createRouter({
           operatorName: operators.name,
         })
         .from(foundryNcrs)
-        .innerJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
-        .innerJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .leftJoin(operators, eq(foundryNcrs.operatorId, operators.id))
         .where(eq(foundryNcrs.id, input.id))
         .limit(1);
 
