@@ -186,6 +186,21 @@ export const foundryNcrImages = pgTable("foundry_ncr_images", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ===== FOUNDRY KNOWLEDGE BASE (AI defect analysis) =====
+export const foundryKnowledge = pgTable("foundry_knowledge", {
+  id: serial("id").primaryKey(),
+  defectType: defectTypeEnum("defect_type").notNull(),
+  possibleCauses: text("possible_causes").notNull(),
+  inspectionMethods: text("inspection_methods"),
+  correctiveActions: text("corrective_actions").notNull(),
+  preventiveActions: text("preventive_actions"),
+  lessonsLearned: text("lessons_learned"),
+  severityIndicators: text("severity_indicators"),
+  relatedDefects: text("related_defects"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // ===== FOUNDRY DEFECTS =====
 export const foundryDefects = pgTable("foundry_defects", {
   id: serial("id").primaryKey(),

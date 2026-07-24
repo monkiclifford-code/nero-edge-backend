@@ -653,6 +653,235 @@ export const foundryRouter = createRouter({
     }),
 
   // ═══════════════════════════════════════════════════════════
+  // DASHBOARD: Recent NCRs for live feed
+  // ═══════════════════════════════════════════════════════════
+  getRecentNcrs: publicQuery
+    .input(z.object({ limit: z.number().default(10) }).optional())
+    .query(async ({ input }) => {
+      const db = getDb();
+      const results = await db
+        .select({
+          id: foundryNcrs.id,
+          jobId: foundryNcrs.jobId,
+          operatorId: foundryNcrs.operatorId,
+          ncrType: foundryNcrs.ncrType,
+          defectType: foundryNcrs.defectType,
+          problemDescription: foundryNcrs.problemDescription,
+          rootCause: foundryNcrs.rootCause,
+          correctiveAction: foundryNcrs.correctiveAction,
+          severity: foundryNcrs.severity,
+          status: foundryNcrs.status,
+          scrapQuantified: foundryNcrs.scrapQuantified,
+          scrapCost: foundryNcrs.scrapCost,
+          version: foundryNcrs.version,
+          approvalStatus: foundryNcrs.approvalStatus,
+          createdAt: foundryNcrs.createdAt,
+          updatedAt: foundryNcrs.updatedAt,
+          jobNumber: jobs.jobNumber,
+          partNumber: jobs.partNumber,
+          materialNumber: jobs.materialNumber,
+          revision: jobs.revision,
+          operatorName: operators.name,
+        })
+        .from(foundryNcrs)
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .leftJoin(operators, eq(foundryNcrs.operatorId, operators.id))
+        .orderBy(desc(foundryNcrs.createdAt))
+        .limit(input?.limit ?? 10);
+
+      // Get image counts for each NCR
+      const ncrsWithImages = await Promise.all(
+        results.map(async (ncr) => {
+          const imgs = await db.select({ count: count() }).from(foundryNcrImages)
+            .where(eq(foundryNcrImages.foundryNcrId, ncr.id));
+          return { ...ncr, imageCount: Number(imgs[0]?.count ?? 0) };
+        })
+      );
+
+      return ncrsWithImages;
+    }),
+
+  // ═══════════════════════════════════════════════════════════
+  // DASHBOARD: AI recommendation from knowledge base
+  // ═══════════════════════════════════════════════════════════
+  getAiRecommendation: publicQuery
+    .input(z.object({ defectType: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const [knowledge] = await db.select().from(foundryKnowledge)
+        .where(eq(foundryKnowledge.defectType, input.defectType))
+        .limit(1);
+
+      if (!knowledge) {
+        return {
+          defectType: input.defectType,
+          hasKnowledge: false,
+          possibleCauses: "No knowledge base entry found for this defect type.",
+          correctiveActions: "Consult foundry engineer for analysis.",
+          preventiveActions: "",
+          inspectionMethods: "",
+          severityIndicators: "",
+          relatedDefects: "",
+        };
+      }
+
+      return {
+        defectType: knowledge.defectType,
+        hasKnowledge: true,
+        possibleCauses: knowledge.possibleCauses,
+        correctiveActions: knowledge.correctiveActions,
+        preventiveActions: knowledge.preventiveActions,
+        inspectionMethods: knowledge.inspectionMethods,
+        lessonsLearned: knowledge.lessonsLearned,
+        severityIndicators: knowledge.severityIndicators,
+        relatedDefects: knowledge.relatedDefects,
+      };
+    }),
+
+  // ═══════════════════════════════════════════════════════════
+  // DASHBOARD: Risk alerts — repeat defect detection
+  // ═══════════════════════════════════════════════════════════
+  getRiskAlerts: publicQuery
+    .query(async () => {
+      const db = getDb();
+
+      // Find parts with multiple NCRs of the same defect type
+      const repeatDefects = await db
+        .select({
+          partNumber: jobs.partNumber,
+          defectType: foundryNcrs.defectType,
+          count: count(),
+          maxSeverity: foundryNcrs.severity,
+        })
+        .from(foundryNcrs)
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .where(eq(foundryNcrs.isLatest, true))
+        .groupBy(jobs.partNumber, foundryNcrs.defectType)
+        .having(sql`${count()} > 1`)
+        .orderBy(desc(count()));
+
+      // Get total scrap cost per part
+      const scrapByPart = await db
+        .select({
+          partNumber: jobs.partNumber,
+          totalScrap: sql`SUM(${foundryNcrs.scrapCost})`,
+          ncrCount: count(),
+        })
+        .from(foundryNcrs)
+        .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+        .where(eq(foundryNcrs.isLatest, true))
+        .groupBy(jobs.partNumber)
+        .orderBy(desc(sql`SUM(${foundryNcrs.scrapCost})`));
+
+      // Build alerts
+      const alerts = [];
+
+      for (const rd of repeatDefects) {
+        const partNcrCount = await db
+          .select({ count: count() })
+          .from(foundryNcrs)
+          .leftJoin(jobs, eq(foundryNcrs.jobId, jobs.id))
+          .where(and(
+            eq(jobs.partNumber, rd.partNumber ?? ""),
+            eq(foundryNcrs.isLatest, true)
+          ));
+
+        alerts.push({
+          type: "repeat_defect" as const,
+          severity: Number(rd.count) >= 4 ? "critical" : Number(rd.count) >= 2 ? "major" : "minor",
+          partNumber: rd.partNumber ?? "Unknown",
+          defectType: rd.defectType,
+          occurrenceCount: Number(rd.count),
+          totalNcrsForPart: Number(partNcrCount[0]?.count ?? 0),
+          message: `Repeated ${rd.defectType?.replace(/_/g, " ")} on ${rd.partNumber}. ${rd.count} NCRs recorded.`,
+          recommendation: `Review casting parameters for ${rd.partNumber}. Consider process audit and pattern review.`,
+        });
+      }
+
+      // Add scrap cost alerts
+      for (const sp of scrapByPart.slice(0, 3)) {
+        if (sp.totalScrap && Number(sp.totalScrap) > 500) {
+          alerts.push({
+            type: "high_scrap" as const,
+            severity: Number(sp.totalScrap) > 2000 ? "critical" : "major",
+            partNumber: sp.partNumber ?? "Unknown",
+            defectType: null,
+            occurrenceCount: Number(sp.ncrCount),
+            totalNcrsForPart: Number(sp.ncrCount),
+            message: `High scrap cost on ${sp.partNumber}: $${Number(sp.totalScrap).toLocaleString()} across ${sp.ncrCount} NCRs.`,
+            recommendation: `Immediate cost review required. Analyze root causes and implement corrective actions.`,
+          });
+        }
+      }
+
+      return alerts.sort((a, b) => {
+        const sevOrder = { critical: 0, major: 1, minor: 2 };
+        return sevOrder[a.severity] - sevOrder[b.severity];
+      });
+    }),
+
+  // ═══════════════════════════════════════════════════════════
+  // DASHBOARD: KPIs and trends
+  // ═══════════════════════════════════════════════════════════
+  getDashboardKpis: publicQuery
+    .query(async () => {
+      const db = getDb();
+
+      const totalNcrs = await db.select({ count: count() }).from(foundryNcrs)
+        .where(eq(foundryNcrs.isLatest, true));
+      const openNcrs = await db.select({ count: count() }).from(foundryNcrs)
+        .where(and(eq(foundryNcrs.isLatest, true), eq(foundryNcrs.status, "open")));
+      const criticalCount = await db.select({ count: count() }).from(foundryNcrs)
+        .where(and(eq(foundryNcrs.isLatest, true), eq(foundryNcrs.severity, "critical")));
+      const pendingApproval = await db.select({ count: count() }).from(foundryNcrs)
+        .where(and(eq(foundryNcrs.isLatest, true), eq(foundryNcrs.approvalStatus, "pending")));
+
+      const scrapResult = await db.select({
+        total: sql`SUM(${foundryNcrs.scrapCost})`,
+      }).from(foundryNcrs).where(eq(foundryNcrs.isLatest, true));
+
+      // Top defects
+      const topDefects = await db
+        .select({
+          defectType: foundryNcrs.defectType,
+          count: count(),
+        })
+        .from(foundryNcrs)
+        .where(eq(foundryNcrs.isLatest, true))
+        .groupBy(foundryNcrs.defectType)
+        .orderBy(desc(count()));
+
+      // Recent trend (last 20 days)
+      const trend = await db
+        .select({
+          date: sql<string>`DATE(${foundryNcrs.createdAt})`,
+          count: count(),
+        })
+        .from(foundryNcrs)
+        .where(sql`${foundryNcrs.createdAt} >= NOW() - INTERVAL '20 days'`)
+        .groupBy(sql`DATE(${foundryNcrs.createdAt})`)
+        .orderBy(sql`DATE(${foundryNcrs.createdAt})`);
+
+      return {
+        kpis: {
+          totalNcrs: Number(totalNcrs[0]?.count ?? 0),
+          openNcrs: Number(openNcrs[0]?.count ?? 0),
+          criticalCount: Number(criticalCount[0]?.count ?? 0),
+          pendingApproval: Number(pendingApproval[0]?.count ?? 0),
+          totalScrapCost: Number(scrapResult[0]?.total ?? 0),
+        },
+        topDefects: topDefects.map(d => ({
+          defectType: d.defectType,
+          count: Number(d.count),
+        })),
+        trend: trend.map(t => ({
+          date: t.date,
+          count: Number(t.count),
+        })),
+      };
+    }),
+
+  // ═══════════════════════════════════════════════════════════
   // Get Casting Batches
   // ═══════════════════════════════════════════════════════════
   getBatches: publicQuery
