@@ -100,15 +100,23 @@ export default function SetupAnnotationEditor() {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   // ═══════════════════════════════════════════════════════════
-  // STEP 1: Load from localStorage (immediate, from "Annotate" click)
+  // STEP 1: Read pending image index from localStorage (lightweight)
+  // NOTE: We do NOT store base64 image data in localStorage anymore
+  // because it causes QuotaExceededError when the 5MB browser limit is hit.
+  // Images are loaded from the database in Step 2.
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (initialLoadDone) return;
-    const pendingImg = localStorage.getItem(`cnc_setup_annotations_${jobId}_pending_image`);
-    if (pendingImg) {
-      setImages([{ imageData: pendingImg, annotations: [], source: "localStorage" }]);
-      localStorage.removeItem(`cnc_setup_annotations_${jobId}_pending_image`);
-      localStorage.removeItem(`cnc_setup_annotations_${jobId}_pending_index`);
+    try {
+      const pendingIndex = localStorage.getItem(`cnc_setup_annotations_${jobId}_pending_index`);
+      if (pendingIndex) {
+        setCurrentImageIndex(parseInt(pendingIndex, 10) || 0);
+        localStorage.removeItem(`cnc_setup_annotations_${jobId}_pending_index`);
+        // Also clean up any legacy pending_image key that might exist
+        localStorage.removeItem(`cnc_setup_annotations_${jobId}_pending_image`);
+      }
+    } catch (e) {
+      console.warn("localStorage cleanup error:", e);
     }
     setInitialLoadDone(true);
   }, [jobId, initialLoadDone]);

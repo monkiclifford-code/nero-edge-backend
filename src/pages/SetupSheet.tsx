@@ -143,6 +143,22 @@ export default function SetupSheet() {
   const [setupMarked, setSetupMarked] = useState(false);
   const [previousLoaded, setPreviousLoaded] = useState(false);
 
+  // ─── Cleanup legacy localStorage on mount ───
+  // Old versions stored base64 images in localStorage causing QuotaExceededError.
+  // Remove any legacy pending_image keys to free up browser storage.
+  useEffect(() => {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.includes("_pending_image")) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   // ─── COPY PREVIOUS SETUP feature ───
   const [showCopyBanner, setShowCopyBanner] = useState(false);
   const [copyMsg, setCopyMsg] = useState("");
@@ -231,10 +247,15 @@ export default function SetupSheet() {
   // ─── Mark setup as viewed ───
   useEffect(() => {
     if (jobId) {
-      const viewedJobs = JSON.parse(localStorage.getItem("cnc_setup_viewed") || "[]");
-      if (!viewedJobs.includes(jobId)) {
-        viewedJobs.push(jobId);
-        localStorage.setItem("cnc_setup_viewed", JSON.stringify(viewedJobs));
+      try {
+        const viewedJobs = JSON.parse(localStorage.getItem("cnc_setup_viewed") || "[]");
+        if (!viewedJobs.includes(jobId)) {
+          viewedJobs.push(jobId);
+          localStorage.setItem("cnc_setup_viewed", JSON.stringify(viewedJobs));
+        }
+      } catch (e) {
+        // localStorage full — silently ignore, not critical
+        console.warn("localStorage quota exceeded for viewed jobs:", e);
       }
       setSetupMarked(true);
     }
@@ -411,16 +432,20 @@ export default function SetupSheet() {
 
   // ─── Navigate to annotation editor ───
   const openAnnotationEditor = (imageIndex: number) => {
-    // Save image data for immediate loading
-    localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_index`, String(imageIndex));
-    localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_image`, setup.images[imageIndex]?.imageData || "");
-    // Save FULL setup context so editor can save even without DB data
-    localStorage.setItem(`cnc_setup_context_${jobId}`, JSON.stringify({
-      workholding: setup.workholding.map(w => ({ label: w.label, value: w.value, displayOrder: 0 })),
-      tools: setup.tools.map(t => ({ toolNumber: t.number, description: t.description, toolId: t.toolId, offset: t.offset, displayOrder: 0 })),
-      programNotes: JSON.stringify(setup.programNotes),
-      generalNotes: setup.generalNotes,
-    }));
+    // Only store lightweight metadata — NEVER store base64 image data in localStorage
+    // (browser quota is ~5MB and images quickly exceed it, causing QuotaExceededError)
+    try {
+      localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_index`, String(imageIndex));
+      // Store minimal context for save fallback (no images!)
+      localStorage.setItem(`cnc_setup_context_${jobId}`, JSON.stringify({
+        workholding: setup.workholding.map(w => ({ label: w.label, value: w.value, displayOrder: 0 })),
+        tools: setup.tools.map(t => ({ toolNumber: t.number, description: t.description, toolId: t.toolId, offset: t.offset, displayOrder: 0 })),
+        programNotes: JSON.stringify(setup.programNotes),
+        generalNotes: setup.generalNotes,
+      }));
+    } catch (e) {
+      console.warn("localStorage quota exceeded, proceeding without cache:", e);
+    }
     navigate(`/setup-annotate/${jobId}`);
   };
 
