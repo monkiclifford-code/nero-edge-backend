@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
+import { getPendingAnnotationImages } from "@/lib/annotationTransfer";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   MousePointer, Pencil, Circle, Square, ArrowRight, Type,
@@ -144,6 +145,7 @@ export default function SetupAnnotationEditor() {
 
   // ═══════════════════════════════════════════════════════════
   // STEP 1: Read pending image index from localStorage (lightweight)
+  // Also read transferred images from in-memory store (avoids localStorage quota)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (initialLoadDone) return;
@@ -156,6 +158,22 @@ export default function SetupAnnotationEditor() {
       }
     } catch (e) {
       console.warn("localStorage cleanup error:", e);
+    }
+    // Read images passed from SetupSheet via in-memory transfer
+    const transferred = getPendingAnnotationImages();
+    if (transferred.images && transferred.images.length > 0) {
+      setImages(transferred.images.map(img => ({
+        id: (img as any).id,
+        imageData: img.imageData,
+        annotations: (img.annotations || []).map((a: any) => ({
+          id: uid(), type: a.type as ToolType, color: a.color,
+          points: typeof a.points === "string" ? JSON.parse(a.points) : (a.points || []),
+          text: a.text || undefined, number: a.number || undefined,
+          strokeWidth: a.strokeWidth || undefined,
+        })),
+        source: img.source || "upload",
+      })));
+      setCurrentImageIndex(transferred.index);
     }
     setInitialLoadDone(true);
   }, [jobId, initialLoadDone]);

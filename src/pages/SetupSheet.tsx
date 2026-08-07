@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { isDemoMode, demoApi } from "@/lib/demoApi";
+import { setPendingAnnotationImages } from "@/lib/annotationTransfer";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   FileText, ClipboardList, AlertTriangle, CheckCircle2,
@@ -432,11 +433,11 @@ export default function SetupSheet() {
 
   // ─── Navigate to annotation editor ───
   const openAnnotationEditor = (imageIndex: number) => {
-    // Only store lightweight metadata — NEVER store base64 image data in localStorage
-    // (browser quota is ~5MB and images quickly exceed it, causing QuotaExceededError)
+    // Pass current images to annotation editor via in-memory transfer
+    // (avoids localStorage quota issues with base64 images)
+    setPendingAnnotationImages(setup.images, imageIndex);
     try {
       localStorage.setItem(`cnc_setup_annotations_${jobId}_pending_index`, String(imageIndex));
-      // Store minimal context for save fallback (no images!)
       localStorage.setItem(`cnc_setup_context_${jobId}`, JSON.stringify({
         workholding: setup.workholding.map(w => ({ label: w.label, value: w.value, displayOrder: 0 })),
         tools: setup.tools.map(t => ({ toolNumber: t.number, description: t.description, toolId: t.toolId, offset: t.offset, displayOrder: 0 })),
