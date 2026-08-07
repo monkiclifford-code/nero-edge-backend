@@ -812,13 +812,13 @@ export default function SetupSheet() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {setup.images.map((img, idx) => (
                     <div key={idx} className="relative group rounded-lg overflow-hidden border border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)]">
                       <img
                         src={img.imageData}
                         alt={`Setup ${idx + 1}`}
-                        className="w-full h-40 object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                        className="w-full h-72 md:h-80 object-cover cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => openAnnotationEditor(idx)}
                       />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
