@@ -7,7 +7,7 @@ import {
   Hash, Undo2, Redo2, Save, ZoomIn, ZoomOut,
   MessageSquare, Eraser, X, Minus, Camera, Upload,
   RotateCcw, ChevronDown, Check, ChevronLeft, ChevronRight,
-  AlertTriangle, BookOpen
+  AlertTriangle, BookOpen, Move
 } from "lucide-react";
 
 // ─── Types ───
@@ -48,6 +48,49 @@ function arrowHeadPoly(tip: Point, tail: Point, size: number): Point[] {
   const perp = angle + Math.PI / 2;
   const base = { x: tip.x - size * 2 * Math.cos(angle), y: tip.y - size * 2 * Math.sin(angle) };
   return [tip, { x: base.x + size * Math.cos(perp), y: base.y + size * Math.sin(perp) }, { x: base.x - size * Math.cos(perp), y: base.y - size * Math.sin(perp) }];
+}
+
+// ─── Distance from point to line segment ───
+function distToSegment(p: Point, a: Point, b: Point): number {
+  const l2 = dist(a, b) ** 2;
+  if (l2 === 0) return dist(p, a);
+  let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return dist(p, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+}
+
+// ─── Hit test: which annotation is under point ───
+function hitTest(ann: Annotation, pt: Point): boolean {
+  const threshold = 18;
+  switch (ann.type) {
+    case "arrow":
+    case "line":
+      if (ann.points.length < 2) return false;
+      return distToSegment(pt, ann.points[0], ann.points[ann.points.length - 1]) < threshold;
+    case "draw":
+      return ann.points.some(p => dist(p, pt) < threshold);
+    case "circle":
+      if (ann.points.length < 2) return false;
+      const r = dist(ann.points[0], ann.points[ann.points.length - 1]);
+      const d = dist(pt, ann.points[0]);
+      return d < r + threshold && d > Math.max(0, r - threshold);
+    case "rect":
+      if (ann.points.length < 2) return false;
+      const minX = Math.min(ann.points[0].x, ann.points[ann.points.length - 1].x);
+      const maxX = Math.max(ann.points[0].x, ann.points[ann.points.length - 1].x);
+      const minY = Math.min(ann.points[0].y, ann.points[ann.points.length - 1].y);
+      const maxY = Math.max(ann.points[0].y, ann.points[ann.points.length - 1].y);
+      return pt.x >= minX - threshold && pt.x <= maxX + threshold && pt.y >= minY - threshold && pt.y <= maxY + threshold;
+    case "text":
+    case "callout":
+      if (ann.points.length < 1) return false;
+      return dist(pt, ann.points[0]) < threshold * 2.5;
+    case "marker":
+      if (ann.points.length < 1) return false;
+      return dist(pt, ann.points[0]) < 22;
+    default:
+      return false;
+  }
 }
 
 // ─── Read stored context ───
@@ -101,9 +144,6 @@ export default function SetupAnnotationEditor() {
 
   // ═══════════════════════════════════════════════════════════
   // STEP 1: Read pending image index from localStorage (lightweight)
-  // NOTE: We do NOT store base64 image data in localStorage anymore
-  // because it causes QuotaExceededError when the 5MB browser limit is hit.
-  // Images are loaded from the database in Step 2.
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (initialLoadDone) return;
@@ -112,7 +152,6 @@ export default function SetupAnnotationEditor() {
       if (pendingIndex) {
         setCurrentImageIndex(parseInt(pendingIndex, 10) || 0);
         localStorage.removeItem(`cnc_setup_annotations_${jobId}_pending_index`);
-        // Also clean up any legacy pending_image key that might exist
         localStorage.removeItem(`cnc_setup_annotations_${jobId}_pending_image`);
       }
     } catch (e) {
@@ -122,25 +161,20 @@ export default function SetupAnnotationEditor() {
   }, [jobId, initialLoadDone]);
 
   // ═══════════════════════════════════════════════════════════
-  // STEP 2: Merge DB data when it loads — DON'T overwrite annotations!
+  // STEP 2: Merge DB data when it loads
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (!setupQuery.data?.images?.length) return;
     setImages(prev => {
-      // Build new array from DB images
       const dbImages: EditorImage[] = setupQuery.data.images.map((dbImg: any) => {
-        // Check if this image already exists in our state (by comparing imageData)
         const existing = prev.find(p => p.imageData === dbImg.imageData);
         if (existing) {
-          // Keep our current annotations, but add any DB annotations we don't have
           const dbAnns: Annotation[] = (dbImg.annotations || []).map((a: any) => ({
             id: uid(), type: a.type as ToolType, color: a.color,
             points: typeof a.points === "string" ? JSON.parse(a.points) : a.points,
             text: a.text || undefined, number: a.number || undefined,
             strokeWidth: a.strokeWidth || undefined,
           }));
-          // If we have annotations in state, keep them (user may have drawn new ones)
-          // If state is empty, use DB annotations
           return {
             ...existing,
             id: dbImg.id,
@@ -148,7 +182,6 @@ export default function SetupAnnotationEditor() {
             annotations: existing.annotations.length > 0 ? existing.annotations : dbAnns,
           };
         }
-        // New image from DB
         return {
           id: dbImg.id,
           imageData: dbImg.imageData,
@@ -161,7 +194,6 @@ export default function SetupAnnotationEditor() {
           source: "database",
         };
       });
-      // Also keep any images that only exist in local state (new uploads)
       const localOnly = prev.filter(p => p.source === "localStorage" || p.source === "upload");
       return [...dbImages, ...localOnly];
     });
@@ -182,6 +214,7 @@ export default function SetupAnnotationEditor() {
     setHistory(anns.length > 0 ? [[...anns]] : []);
     setHistoryIndex(anns.length > 0 ? 0 : -1);
     setMarkerCount(1); setZoom(1); setPan({ x: 0, y: 0 });
+    setSelectedId(null); // clear selection on image change
   }, [currentImageIndex, currentImg?.imageData]);
 
   // ─── Drawing state ───
@@ -193,6 +226,12 @@ export default function SetupAnnotationEditor() {
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
+
+  // ─── Select + Drag state ───
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isDraggingAnn, setIsDraggingAnn] = useState(false);
+  const dragStartPt = useRef<Point>({ x: 0, y: 0 });
+  const dragStartAnns = useRef<Annotation[]>([]);
 
   const [calloutInput, setCalloutInput] = useState<{ x: number; y: number; visible: boolean } | null>(null);
   const [calloutText, setCalloutText] = useState("");
@@ -226,18 +265,60 @@ export default function SetupAnnotationEditor() {
     const imgX = (canvas.width / zoom - image.width) / 2;
     const imgY = (canvas.height / zoom - image.height) / 2;
     ctx.drawImage(image, imgX, imgY);
-    annotations.forEach((ann) => drawAnnotation(ctx, ann, imgX, imgY));
+    annotations.forEach((ann) => drawAnnotation(ctx, ann, imgX, imgY, ann.id === selectedId));
     if (isDrawing && currentPoints.length > 0) {
       const tempAnn: Annotation = { id: "temp", type: activeTool, color: COLORS[activeColor], points: currentPoints, strokeWidth, text: activeTool === "callout" ? calloutText : undefined };
-      drawAnnotation(ctx, tempAnn, imgX, imgY);
+      drawAnnotation(ctx, tempAnn, imgX, imgY, false);
     }
     ctx.restore();
-  }, [image, annotations, isDrawing, currentPoints, zoom, pan, activeColor, activeTool, strokeWidth, calloutText]);
+  }, [image, annotations, isDrawing, currentPoints, zoom, pan, activeColor, activeTool, strokeWidth, calloutText, selectedId]);
 
-  const drawAnnotation = (ctx: CanvasRenderingContext2D, ann: Annotation, imgX: number, imgY: number) => {
+  const drawAnnotation = (ctx: CanvasRenderingContext2D, ann: Annotation, imgX: number, imgY: number, isSelected: boolean) => {
     ctx.strokeStyle = ann.color; ctx.fillStyle = ann.color;
     ctx.lineWidth = ann.strokeWidth || 3; ctx.lineCap = "round"; ctx.lineJoin = "round";
     const pts = ann.points.map(p => ({ x: p.x + imgX, y: p.y + imgY }));
+
+    // Selection highlight
+    if (isSelected) {
+      ctx.save();
+      ctx.strokeStyle = "#f5a623";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      switch (ann.type) {
+        case "arrow":
+        case "line":
+          if (pts.length >= 2) {
+            ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y); ctx.stroke();
+          }
+          break;
+        case "circle":
+          if (pts.length >= 2) {
+            const r = dist(pts[0], pts[pts.length - 1]);
+            ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, r + 4, 0, Math.PI * 2); ctx.stroke();
+          }
+          break;
+        case "rect":
+          if (pts.length >= 2) {
+            ctx.strokeRect(Math.min(pts[0].x, pts[pts.length - 1].x) - 4, Math.min(pts[0].y, pts[pts.length - 1].y) - 4, Math.abs(pts[pts.length - 1].x - pts[0].x) + 8, Math.abs(pts[pts.length - 1].y - pts[0].y) + 8);
+          }
+          break;
+        case "text":
+        case "callout":
+        case "marker":
+          if (pts.length >= 1) {
+            ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 22, 0, Math.PI * 2); ctx.stroke();
+          }
+          break;
+        case "draw":
+          if (pts.length > 0) {
+            ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 8, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(pts[pts.length - 1].x, pts[pts.length - 1].y, 8, 0, Math.PI * 2); ctx.stroke();
+          }
+          break;
+      }
+      ctx.restore();
+    }
+
     switch (ann.type) {
       case "draw": if (pts.length < 2) return; ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) { const mid = midPoint(pts[i - 1], pts[i]); ctx.quadraticCurveTo(pts[i - 1].x, pts[i - 1].y, mid.x, mid.y); } ctx.stroke(); break;
       case "line": if (pts.length < 2) return; ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y); ctx.stroke(); break;
@@ -250,21 +331,50 @@ export default function SetupAnnotationEditor() {
     }
   };
 
+  // ─── Multi-line callout with text wrapping ───
   const drawCallout = (ctx: CanvasRenderingContext2D, point: Point, text: string, color: string, imgX: number, imgY: number) => {
-    const padding = 8, cr = 6;
+    const padding = 8, cr = 6, lineHeight = 18, maxWidth = 180;
     ctx.font = `bold ${13 / zoom}px system-ui, sans-serif`;
-    const m = ctx.measureText(text);
-    const bw = Math.max(m.width + padding * 2, 80), bh = 30;
+
+    // Wrap text into lines
+    const words = text.split(/\s+/);
+    const lines: string[] = [];
+    let currentLine = "";
+    for (const word of words) {
+      const test = currentLine ? currentLine + " " + word : word;
+      if (ctx.measureText(test).width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = test;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    if (lines.length === 0) lines.push(text);
+
+    const maxLineWidth = Math.max(...lines.map(l => ctx.measureText(l).width));
+    const bw = Math.max(maxLineWidth + padding * 2, 80);
+    const bh = Math.max(lines.length * lineHeight + padding * 2, 30);
+
     let bx = point.x + imgX + 20, by = point.y + imgY - bh - 20;
     if (by < 10) by = point.y + imgY + 20;
+
+    // Leader line
     ctx.beginPath(); ctx.moveTo(point.x + imgX, point.y + imgY); ctx.lineTo(bx + bw / 2, by + bh / 2);
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
     ctx.beginPath(); ctx.arc(point.x + imgX, point.y + imgY, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+
+    // Box
     ctx.fillStyle = "rgba(20,20,30,0.9)"; ctx.strokeStyle = color; ctx.lineWidth = 2;
     roundRect(ctx, bx, by, bw, bh, cr); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.fillText(text, bx + padding, by + bh / 2);
+
+    // Text lines
+    ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+    lines.forEach((line, i) => {
+      ctx.fillText(line, bx + padding, by + padding + i * lineHeight);
+    });
   };
+
   const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
     ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
     ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
@@ -286,22 +396,73 @@ export default function SetupAnnotationEditor() {
     return { x: (canvas.width / zoom - image.width) / 2, y: (canvas.height / zoom - image.height) / 2 };
   };
   const toImageCoords = (pt: Point): Point => { const o = getImageOffset(); return { x: pt.x - o.x, y: pt.y - o.y }; };
+  const fromImageCoords = (pt: Point): Point => { const o = getImageOffset(); return { x: pt.x + o.x, y: pt.y + o.y }; };
 
+  // ─── Pointer handlers with SELECT + DRAG support ───
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     const pt = getCanvasPoint(e); if (!pt) return;
-    if (activeTool === "select" || (e as React.MouseEvent).shiftKey) { setIsPanning(true); panStart.current = { x: (e as React.MouseEvent).clientX - pan.x, y: (e as React.MouseEvent).clientY - pan.y }; return; }
+
+    // Eraser tool
+    if (activeTool === "eraser") { eraseAt(e); return; }
+
+    // Select tool: check if clicking on an annotation to drag it
+    if (activeTool === "select") {
+      const imgPt = toImageCoords(pt);
+      // Search in reverse (topmost first)
+      for (let i = annotations.length - 1; i >= 0; i--) {
+        if (hitTest(annotations[i], imgPt)) {
+          setSelectedId(annotations[i].id);
+          setIsDraggingAnn(true);
+          dragStartPt.current = imgPt;
+          dragStartAnns.current = JSON.parse(JSON.stringify(annotations));
+          return;
+        }
+      }
+      // Clicked empty space: deselect and start pan
+      setSelectedId(null);
+      setIsPanning(true);
+      panStart.current = { x: (e as React.MouseEvent).clientX - pan.x, y: (e as React.MouseEvent).clientY - pan.y };
+      return;
+    }
+
+    // All other tools: start drawing
     setIsDrawing(true); setCurrentPoints([toImageCoords(pt)]);
   };
+
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
-    if (isPanning) { setPan({ x: (e as React.MouseEvent).clientX - panStart.current.x, y: (e as React.MouseEvent).clientY - panStart.current.y }); return; }
-    if (!isDrawing) return;
     const pt = getCanvasPoint(e); if (!pt) return;
+
+    if (isPanning) {
+      setPan({ x: (e as React.MouseEvent).clientX - panStart.current.x, y: (e as React.MouseEvent).clientY - panStart.current.y });
+      return;
+    }
+
+    if (isDraggingAnn && selectedId) {
+      const imgPt = toImageCoords(pt);
+      const dx = imgPt.x - dragStartPt.current.x;
+      const dy = imgPt.y - dragStartPt.current.y;
+      const newAnns = dragStartAnns.current.map(ann => {
+        if (ann.id !== selectedId) return ann;
+        return { ...ann, points: ann.points.map(p => ({ x: p.x + dx, y: p.y + dy })) };
+      });
+      setAnnotations(newAnns);
+      return;
+    }
+
+    if (!isDrawing) return;
     setCurrentPoints(prev => [...prev, toImageCoords(pt)]);
   };
+
   const handlePointerUp = () => {
     if (isPanning) { setIsPanning(false); return; }
+    if (isDraggingAnn) {
+      setIsDraggingAnn(false);
+      pushHistory(annotations);
+      setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations } : img));
+      return;
+    }
     if (!isDrawing) return;
     setIsDrawing(false);
     if (currentPoints.length === 0) return;
@@ -330,8 +491,8 @@ export default function SetupAnnotationEditor() {
     if (nh.length > 50) nh.shift();
     setHistory(nh); setHistoryIndex(nh.length - 1);
   };
-  const undo = () => { if (historyIndex <= 0) return; const ni = historyIndex - 1; setHistoryIndex(ni); const anns = [...history[ni]]; setAnnotations(anns); setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations: anns } : img)); };
-  const redo = () => { if (historyIndex >= history.length - 1) return; const ni = historyIndex + 1; setHistoryIndex(ni); const anns = [...history[ni]]; setAnnotations(anns); setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations: anns } : img)); };
+  const undo = () => { if (historyIndex <= 0) return; const ni = historyIndex - 1; setHistoryIndex(ni); const anns = [...history[ni]]; setAnnotations(anns); setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations: anns } : img)); setSelectedId(null); };
+  const redo = () => { if (historyIndex >= history.length - 1) return; const ni = historyIndex + 1; setHistoryIndex(ni); const anns = [...history[ni]]; setAnnotations(anns); setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations: anns } : img)); setSelectedId(null); };
 
   const saveCallout = () => {
     if (!calloutInput || !calloutText.trim()) { setCalloutInput(null); return; }
@@ -351,29 +512,23 @@ export default function SetupAnnotationEditor() {
   };
 
   // ═══════════════════════════════════════════════════════════
-  // SAVE: Uses DB data OR localStorage context
+  // SAVE
   // ═══════════════════════════════════════════════════════════
   const saveSetup = () => {
     if (!operator || !jobQuery.data) {
       setErrorMsg("Missing operator or job data. Please go back and try again.");
       return;
     }
-
-    // Get setup data: prefer DB, fallback to localStorage context
     const dbData = setupQuery.data;
     const ctx = getStoredContext(jobId || "");
-
     const workholding = dbData?.workholding?.length
       ? dbData.workholding.map((w: any) => ({ label: w.label, value: w.value || "", displayOrder: w.displayOrder || 0 }))
       : ctx?.workholding || [];
-
     const tools = dbData?.tools?.length
       ? dbData.tools.map((t: any) => ({ toolNumber: t.toolNumber, description: t.description || undefined, toolId: t.toolId || undefined, offset: t.offset || undefined, displayOrder: t.displayOrder || 0 }))
       : ctx?.tools || [];
-
     const programNotes = dbData?.programNotes || ctx?.programNotes || undefined;
     const generalNotes = setupNotes || dbData?.generalNotes || ctx?.generalNotes || undefined;
-
     saveMutation.mutate({
       jobId: numericJobId,
       partNumber: jobQuery.data.partNumber,
@@ -445,11 +600,11 @@ export default function SetupAnnotationEditor() {
     const pt = getCanvasPoint(e); if (!pt) return;
     const imgPt = toImageCoords(pt);
     const newAnns = annotations.filter(ann => !ann.points.some(p => dist(p, imgPt) < 20));
-    if (newAnns.length < annotations.length) { setAnnotations(newAnns); pushHistory(newAnns); setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations: newAnns } : img)); }
+    if (newAnns.length < annotations.length) { setAnnotations(newAnns); pushHistory(newAnns); setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations: newAnns } : img)); setSelectedId(null); }
   }, [annotations, zoom, pan, currentImageIndex]);
 
   const tools: { type: ToolType; icon: React.ReactNode; label: string }[] = [
-    { type: "select", icon: <MousePointer className="h-4 w-4" />, label: "Select/Pan" },
+    { type: "select", icon: <Move className="h-4 w-4" />, label: "Select/Move" },
     { type: "draw", icon: <Pencil className="h-4 w-4" />, label: "Draw" },
     { type: "arrow", icon: <ArrowRight className="h-4 w-4" />, label: "Arrow" },
     { type: "circle", icon: <Circle className="h-4 w-4" />, label: "Circle" },
@@ -498,7 +653,7 @@ export default function SetupAnnotationEditor() {
           </div>
         )}
 
-        {/* ═══ IMAGE NAVIGATION BAR (always shown if images exist) ═══ */}
+        {/* ═══ IMAGE NAVIGATION BAR ═══ */}
         {images.length > 0 && (
           <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[hsl(220,14%,16%)] bg-[hsl(220,14%,8%)]">
             <button onClick={() => setCurrentImageIndex(i => Math.max(0, i - 1))} disabled={currentImageIndex === 0}
@@ -528,11 +683,10 @@ export default function SetupAnnotationEditor() {
           </div>
         )}
 
-        {/* ═══ TOOLBAR (always shown, wraps on mobile) ═══ */}
+        {/* ═══ TOOLBAR ═══ */}
         <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-b border-[hsl(220,14%,16%)] bg-[hsl(220,14%,10%)] flex-shrink-0">
-          {/* Drawing tools */}
           {tools.map(t => (
-            <button key={t.type} onClick={() => setActiveTool(t.type)} title={t.label}
+            <button key={t.type} onClick={() => { setActiveTool(t.type); if (t.type !== "select") setSelectedId(null); }} title={t.label}
               className={`h-8 w-8 sm:h-9 sm:w-9 rounded-md flex items-center justify-center transition-all flex-shrink-0 ${activeTool === t.type ? "bg-orange-500/25 text-orange-400 border border-orange-500/50 shadow-sm shadow-orange-500/10" : "text-white/60 hover:text-white/90 hover:bg-white/10 border border-transparent"}`}>
               {t.icon}
             </button>
@@ -621,26 +775,32 @@ export default function SetupAnnotationEditor() {
               onMouseDown={activeTool === "eraser" ? eraseAt : handlePointerDown}
               onMouseMove={handlePointerMove} onMouseUp={handlePointerUp} onMouseLeave={handlePointerUp}
               onTouchStart={handlePointerDown} onTouchMove={handlePointerMove} onTouchEnd={handlePointerUp}
-              style={{ cursor: activeTool === "select" ? "grab" : activeTool === "eraser" ? "not-allowed" : "crosshair" }}
+              style={{ cursor: activeTool === "select" ? (isDraggingAnn ? "grabbing" : "grab") : activeTool === "eraser" ? "not-allowed" : "crosshair" }}
             />
 
+            {/* ═══ CALLOUT INPUT (multi-line textarea) ═══ */}
             {calloutInput?.visible && (
               <div className="absolute z-50 flex flex-col gap-1" style={{ left: calloutInput.x, top: calloutInput.y }}>
-                <div className="bg-[hsl(220,14%,10%)] border border-orange-500/40 rounded-lg shadow-xl p-2 flex flex-col gap-1.5 min-w-[220px]">
+                <div className="bg-[hsl(220,14%,10%)] border border-orange-500/40 rounded-lg shadow-xl p-2 flex flex-col gap-1.5 min-w-[240px]">
                   <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wider">Add Callout</p>
-                  <input type="text" value={calloutText} onChange={e => setCalloutText(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") saveCallout(); if (e.key === "Escape") setCalloutInput(null); }}
-                    placeholder="e.g. Clock impeller boss for runout"
-                    className="w-full h-8 px-2 rounded border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-white/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-500/40"
-                    autoFocus />
+                  <textarea
+                    value={calloutText}
+                    onChange={e => setCalloutText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) saveCallout(); if (e.key === "Escape") setCalloutInput(null); }}
+                    placeholder="Type callout text...&#10;Ctrl+Enter to add"
+                    rows={3}
+                    className="w-full px-2 py-1.5 rounded border border-[hsl(220,14%,22%)] bg-[hsl(220,14%,16%)] text-sm text-white placeholder:text-white/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-500/40 resize-none"
+                    autoFocus
+                  />
                   <div className="flex gap-1">
-                    <button onClick={saveCallout} className="flex-1 h-7 text-xs font-semibold bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded transition-all">Add</button>
+                    <button onClick={saveCallout} className="flex-1 h-7 text-xs font-semibold bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded transition-all">Add (Ctrl+Enter)</button>
                     <button onClick={() => setCalloutInput(null)} className="h-7 px-2 text-xs text-white/40 hover:text-white/60 transition-all">Cancel</button>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* ═══ TEXT INPUT ═══ */}
             {textInput?.visible && (
               <div className="absolute z-50" style={{ left: textInput.x, top: textInput.y }}>
                 <div className="bg-[hsl(220,14%,10%)] border border-blue-500/40 rounded-lg shadow-xl p-2 flex flex-col gap-1.5 min-w-[180px]">
@@ -658,10 +818,21 @@ export default function SetupAnnotationEditor() {
               </div>
             )}
 
+            {/* Bottom tool indicator */}
             <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm rounded-md px-2.5 py-1 flex items-center gap-2">
               <span className="text-[10px] text-white/40 uppercase tracking-wider">Tool:</span>
-              <span className="text-xs font-semibold text-orange-400 capitalize">{activeTool === "callout" ? "Callout" : activeTool}</span>
+              <span className="text-xs font-semibold text-orange-400 capitalize">
+                {activeTool === "select" ? (selectedId ? "Move" : "Select") : activeTool === "callout" ? "Callout" : activeTool}
+              </span>
+              {selectedId && <span className="text-[10px] text-white/30">| Drag to move</span>}
             </div>
+
+            {/* Selection help tooltip */}
+            {activeTool === "select" && !selectedId && annotations.length > 0 && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-sm rounded-md px-3 py-1">
+                <span className="text-[10px] text-white/50">Tap an annotation to select, then drag to move</span>
+              </div>
+            )}
           </div>
 
           {showNotesPanel && (

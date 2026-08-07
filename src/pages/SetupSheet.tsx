@@ -821,17 +821,20 @@ export default function SetupSheet() {
                         className="w-full h-72 md:h-80 object-cover cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => openAnnotationEditor(idx)}
                       />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      {/* Mobile: always-visible annotate badge. Desktop: hover overlay */}
+                      <div className="absolute top-2 right-2 flex flex-col gap-1.5">
                         <button
-                          onClick={() => openAnnotationEditor(idx)}
-                          className="h-8 px-3 rounded-md bg-orange-500/80 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1"
+                          onClick={(e) => { e.stopPropagation(); openAnnotationEditor(idx); }}
+                          className="h-8 px-2.5 rounded-md bg-orange-500/90 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1 shadow-lg"
+                          title="Annotate"
                         >
                           <Pencil className="h-3 w-3" /> Annotate
                         </button>
                         {editing && (
                           <button
-                            onClick={() => removeImage(idx)}
-                            className="h-8 px-3 rounded-md bg-rose-500/80 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1"
+                            onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
+                            className="h-8 px-2.5 rounded-md bg-rose-500/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1 shadow-lg"
+                            title="Remove"
                           >
                             <Trash2 className="h-3 w-3" /> Remove
                           </button>
@@ -841,7 +844,7 @@ export default function SetupSheet() {
                         #{idx + 1}
                       </div>
                       {img.annotations && img.annotations.length > 0 && (
-                        <div className="absolute top-2 right-2 bg-orange-500/80 rounded-full h-5 w-5 flex items-center justify-center">
+                        <div className="absolute bottom-2 left-2 bg-orange-500/80 rounded-full h-5 w-5 flex items-center justify-center">
                           <span className="text-[10px] text-white font-bold">{img.annotations.length}</span>
                         </div>
                       )}
