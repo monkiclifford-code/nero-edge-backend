@@ -61,8 +61,10 @@ function distToSegment(p: Point, a: Point, b: Point): number {
 }
 
 // ─── Hit test: which annotation is under point ───
-function hitTest(ann: Annotation, pt: Point): boolean {
-  const threshold = 18;
+// Threshold is in image coordinates; we scale it by zoom to ensure
+// comfortable touch targets on mobile (~30-45 screen pixels).
+function hitTest(ann: Annotation, pt: Point, zoom: number): boolean {
+  const threshold = 45 / zoom;
   switch (ann.type) {
     case "arrow":
     case "line":
@@ -88,7 +90,7 @@ function hitTest(ann: Annotation, pt: Point): boolean {
       return dist(pt, ann.points[0]) < threshold * 2.5;
     case "marker":
       if (ann.points.length < 1) return false;
-      return dist(pt, ann.points[0]) < 22;
+      return dist(pt, ann.points[0]) < 55 / zoom;
     default:
       return false;
   }
@@ -250,6 +252,7 @@ export default function SetupAnnotationEditor() {
   const [isDraggingAnn, setIsDraggingAnn] = useState(false);
   const dragStartPt = useRef<Point>({ x: 0, y: 0 });
   const dragStartAnns = useRef<Annotation[]>([]);
+  const dragCurrentAnns = useRef<Annotation[]>([]); // tracks latest during drag
 
   const [calloutInput, setCalloutInput] = useState<{ x: number; y: number; visible: boolean } | null>(null);
   const [calloutText, setCalloutText] = useState("");
@@ -345,12 +348,14 @@ export default function SetupAnnotationEditor() {
       case "rect": if (pts.length < 2) return; ctx.strokeRect(Math.min(pts[0].x, pts[pts.length - 1].x), Math.min(pts[0].y, pts[pts.length - 1].y), Math.abs(pts[pts.length - 1].x - pts[0].x), Math.abs(pts[pts.length - 1].y - pts[0].y)); break;
       case "text": if (pts.length < 1 || !ann.text) return; ctx.font = `bold ${14 / zoom}px system-ui, sans-serif`; ctx.fillStyle = ann.color; ctx.fillText(ann.text, pts[0].x, pts[0].y); break;
       case "marker": if (pts.length < 1) return; const n = ann.number || 1; const mr = 14; ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, mr, 0, Math.PI * 2); ctx.fillStyle = ann.color; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = "#fff"; ctx.font = `bold ${13 / zoom}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), pts[0].x, pts[0].y); break;
-      case "callout": if (pts.length < 1 || !ann.text) return; drawCallout(ctx, pts[0], ann.text, ann.color, imgX, imgY); break;
+      case "callout": if (pts.length < 1 || !ann.text) return; drawCallout(ctx, pts[0], ann.text, ann.color, canvas.width, canvas.height); break;
     }
   };
 
   // ─── Multi-line callout with text wrapping ───
-  const drawCallout = (ctx: CanvasRenderingContext2D, point: Point, text: string, color: string, imgX: number, imgY: number) => {
+  // NOTE: `point` is already in CANVAS coordinates (drawAnnotation adds imgOffset).
+  // Do NOT add imgOffset again or the callout will render at the wrong position.
+  const drawCallout = (ctx: CanvasRenderingContext2D, point: Point, text: string, color: string, canvasW: number, canvasH: number) => {
     const padding = 8, cr = 6, lineHeight = 18, maxWidth = 180;
     ctx.font = `bold ${13 / zoom}px system-ui, sans-serif`;
 
@@ -374,13 +379,19 @@ export default function SetupAnnotationEditor() {
     const bw = Math.max(maxLineWidth + padding * 2, 80);
     const bh = Math.max(lines.length * lineHeight + padding * 2, 30);
 
-    let bx = point.x + imgX + 20, by = point.y + imgY - bh - 20;
-    if (by < 10) by = point.y + imgY + 20;
+    // Position callout box near the anchor point, but keep it on-screen
+    let bx = point.x + 20, by = point.y - bh - 20;
+    // Flip below anchor if it would go above the top
+    if (by < 10) by = point.y + 20;
+    // Keep within canvas right edge
+    if (bx + bw > canvasW - 10) bx = Math.max(10, point.x - bw - 20);
+    // Keep within canvas left edge
+    if (bx < 10) bx = point.x + 20;
 
-    // Leader line
-    ctx.beginPath(); ctx.moveTo(point.x + imgX, point.y + imgY); ctx.lineTo(bx + bw / 2, by + bh / 2);
+    // Leader line from anchor to box center
+    ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(bx + bw / 2, by + bh / 2);
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
-    ctx.beginPath(); ctx.arc(point.x + imgX, point.y + imgY, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+    ctx.beginPath(); ctx.arc(point.x, point.y, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
 
     // Box
     ctx.fillStyle = "rgba(20,20,30,0.9)"; ctx.strokeStyle = color; ctx.lineWidth = 2;
@@ -417,6 +428,15 @@ export default function SetupAnnotationEditor() {
   const fromImageCoords = (pt: Point): Point => { const o = getImageOffset(); return { x: pt.x + o.x, y: pt.y + o.y }; };
 
   // ─── Pointer handlers with SELECT + DRAG support ───
+  // Helper: get clientX/Y from mouse or touch event
+  const getClientXY = (e: React.MouseEvent | React.TouchEvent) => {
+    if ("touches" in e) {
+      const t = e.touches[0] || e.changedTouches[0];
+      return { x: t.clientX, y: t.clientY };
+    }
+    return { x: e.clientX, y: e.clientY };
+  };
+
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     const pt = getCanvasPoint(e); if (!pt) return;
@@ -429,18 +449,20 @@ export default function SetupAnnotationEditor() {
       const imgPt = toImageCoords(pt);
       // Search in reverse (topmost first)
       for (let i = annotations.length - 1; i >= 0; i--) {
-        if (hitTest(annotations[i], imgPt)) {
+        if (hitTest(annotations[i], imgPt, zoom)) {
           setSelectedId(annotations[i].id);
           setIsDraggingAnn(true);
           dragStartPt.current = imgPt;
           dragStartAnns.current = JSON.parse(JSON.stringify(annotations));
+          dragCurrentAnns.current = JSON.parse(JSON.stringify(annotations));
           return;
         }
       }
       // Clicked empty space: deselect and start pan
       setSelectedId(null);
       setIsPanning(true);
-      panStart.current = { x: (e as React.MouseEvent).clientX - pan.x, y: (e as React.MouseEvent).clientY - pan.y };
+      const c = getClientXY(e);
+      panStart.current = { x: c.x - pan.x, y: c.y - pan.y };
       return;
     }
 
@@ -453,7 +475,8 @@ export default function SetupAnnotationEditor() {
     const pt = getCanvasPoint(e); if (!pt) return;
 
     if (isPanning) {
-      setPan({ x: (e as React.MouseEvent).clientX - panStart.current.x, y: (e as React.MouseEvent).clientY - panStart.current.y });
+      const c = getClientXY(e);
+      setPan({ x: c.x - panStart.current.x, y: c.y - panStart.current.y });
       return;
     }
 
@@ -466,6 +489,7 @@ export default function SetupAnnotationEditor() {
         return { ...ann, points: ann.points.map(p => ({ x: p.x + dx, y: p.y + dy })) };
       });
       setAnnotations(newAnns);
+      dragCurrentAnns.current = newAnns;
       return;
     }
 
@@ -477,8 +501,11 @@ export default function SetupAnnotationEditor() {
     if (isPanning) { setIsPanning(false); return; }
     if (isDraggingAnn) {
       setIsDraggingAnn(false);
-      pushHistory(annotations);
-      setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations } : img));
+      const finalAnns = dragCurrentAnns.current.length > 0 ? dragCurrentAnns.current : annotations;
+      pushHistory(finalAnns);
+      setAnnotations(finalAnns);
+      setImages(prev => prev.map((img, i) => i === currentImageIndex ? { ...img, annotations: finalAnns } : img));
+      dragCurrentAnns.current = [];
       return;
     }
     if (!isDrawing) return;
@@ -614,7 +641,7 @@ export default function SetupAnnotationEditor() {
   const zoomOut = () => setZoom(z => Math.max(z / 1.2, 0.3));
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
-  const eraseAt = useCallback((e: React.MouseEvent) => {
+  const eraseAt = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     const pt = getCanvasPoint(e); if (!pt) return;
     const imgPt = toImageCoords(pt);
     const newAnns = annotations.filter(ann => !ann.points.some(p => dist(p, imgPt) < 20));
