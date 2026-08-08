@@ -286,15 +286,15 @@ export default function SetupAnnotationEditor() {
     const imgX = (canvas.width / zoom - image.width) / 2;
     const imgY = (canvas.height / zoom - image.height) / 2;
     ctx.drawImage(image, imgX, imgY);
-    annotations.forEach((ann) => drawAnnotation(ctx, ann, imgX, imgY, ann.id === selectedId));
+    annotations.forEach((ann) => drawAnnotation(ctx, ann, imgX, imgY, ann.id === selectedId, canvas.width, canvas.height));
     if (isDrawing && currentPoints.length > 0) {
       const tempAnn: Annotation = { id: "temp", type: activeTool, color: COLORS[activeColor], points: currentPoints, strokeWidth, text: activeTool === "callout" ? calloutText : undefined };
-      drawAnnotation(ctx, tempAnn, imgX, imgY, false);
+      drawAnnotation(ctx, tempAnn, imgX, imgY, false, canvas.width, canvas.height);
     }
     ctx.restore();
   }, [image, annotations, isDrawing, currentPoints, zoom, pan, activeColor, activeTool, strokeWidth, calloutText, selectedId]);
 
-  const drawAnnotation = (ctx: CanvasRenderingContext2D, ann: Annotation, imgX: number, imgY: number, isSelected: boolean) => {
+  const drawAnnotation = (ctx: CanvasRenderingContext2D, ann: Annotation, imgX: number, imgY: number, isSelected: boolean, canvasW: number, canvasH: number) => {
     ctx.strokeStyle = ann.color; ctx.fillStyle = ann.color;
     ctx.lineWidth = ann.strokeWidth || 3; ctx.lineCap = "round"; ctx.lineJoin = "round";
     const pts = ann.points.map(p => ({ x: p.x + imgX, y: p.y + imgY }));
@@ -348,7 +348,7 @@ export default function SetupAnnotationEditor() {
       case "rect": if (pts.length < 2) return; ctx.strokeRect(Math.min(pts[0].x, pts[pts.length - 1].x), Math.min(pts[0].y, pts[pts.length - 1].y), Math.abs(pts[pts.length - 1].x - pts[0].x), Math.abs(pts[pts.length - 1].y - pts[0].y)); break;
       case "text": if (pts.length < 1 || !ann.text) return; ctx.font = `bold ${14 / zoom}px system-ui, sans-serif`; ctx.fillStyle = ann.color; ctx.fillText(ann.text, pts[0].x, pts[0].y); break;
       case "marker": if (pts.length < 1) return; const n = ann.number || 1; const mr = 14; ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, mr, 0, Math.PI * 2); ctx.fillStyle = ann.color; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = "#fff"; ctx.font = `bold ${13 / zoom}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), pts[0].x, pts[0].y); break;
-      case "callout": if (pts.length < 1 || !ann.text) return; drawCallout(ctx, pts[0], ann.text, ann.color, canvas.width, canvas.height); break;
+      case "callout": if (pts.length < 1 || !ann.text) return; drawCallout(ctx, pts[0], ann.text, ann.color, canvasW, canvasH); break;
     }
   };
 
