@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTutorial } from './TutorialProvider'
+import { getStepAudioUrl, hasVoiceoverAudio } from './voiceMap'
 import {
-  ChevronRight, ChevronLeft, X, Play, Pause, Mic, BookOpen
+  ChevronRight, ChevronLeft, X, Play, Pause, Mic, BookOpen,
+  Volume2, VolumeX
 } from 'lucide-react'
 
 export default function TutorialOverlay() {
-  const { state, nextStep, prevStep, endTour, setTargetRect, goToStep } = useTutorial()
+  const {
+    state, audioState,
+    nextStep, prevStep, endTour, setTargetRect, goToStep,
+    setAudioPlaying, setAudioMuted, setAudioVolume,
+    setAudioTime, setAudioDuration, setAudioEnded, setHasAudio,
+  } = useTutorial()
+
   const [elementRect, setElementRect] = useState<DOMRect | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [isPaused, setIsPaused] = useState(false)
   const [showVoiceover, setShowVoiceover] = useState(false)
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const [viewport, setViewport] = useState({ w: window.innerWidth, h: window.innerHeight })
 
   const { isActive, currentTour, currentStepIndex, isTransitioning } = state
@@ -20,6 +29,11 @@ export default function TutorialOverlay() {
     ? currentStepIndex >= currentTour.steps.length - 1
     : false
   const isFirstStep = currentStepIndex === 0
+
+  // Compute current audio URL
+  const audioUrl = currentTour
+    ? getStepAudioUrl(currentTour.id, currentStepIndex)
+    : null
 
   // Track viewport size
   useEffect(() => {
@@ -105,9 +119,61 @@ export default function TutorialOverlay() {
     setTooltipPos({ x, y })
   }, [elementRect, step, isActive, viewport])
 
-  // Auto-advance
+  // Audio: Load and play when step changes
+  useEffect(() => {
+    if (!isActive || !audioRef.current) return
+    const audio = audioRef.current
+
+    if (audioUrl) {
+      setHasAudio(true)
+      audio.src = audioUrl
+      audio.load()
+      audio.volume = audioState.volume
+      audio.muted = audioState.isMuted
+
+      const playAudio = async () => {
+        try {
+          await audio.play()
+          setAudioPlaying(true)
+        } catch {
+          // Auto-play may be blocked by browser policy
+          setAudioPlaying(false)
+        }
+      }
+
+      // Small delay to let route transition settle
+      const timer = setTimeout(playAudio, 300)
+      return () => clearTimeout(timer)
+    } else {
+      setHasAudio(false)
+      audio.src = ''
+    }
+  }, [isActive, audioUrl, currentStepIndex, audioState.volume, audioState.isMuted])
+
+  // Sync audio play/pause with tour pause state
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !audioState.hasAudio) return
+    if (isPaused) {
+      audio.pause()
+    } else if (audioState.isPlaying) {
+      audio.play().catch(() => {})
+    }
+  }, [isPaused, audioState.isPlaying, audioState.hasAudio])
+
+  // When audio ends, auto-advance if step has autoAdvance
+  useEffect(() => {
+    if (!audioState.audioEnded || !step?.autoAdvance || isPaused) return
+    const timer = setTimeout(() => {
+      nextStep()
+    }, 500) // brief pause before advancing
+    return () => clearTimeout(timer)
+  }, [audioState.audioEnded, step, isPaused, nextStep])
+
+  // Fallback auto-advance timer (if no audio or audio fails)
   useEffect(() => {
     if (!isActive || !step?.autoAdvance || isPaused || isTransitioning) return
+    if (audioState.hasAudio && audioState.duration > 0) return // audio-driven advance
     const delay = step.autoAdvanceDelay || 5000
     autoAdvanceTimerRef.current = setTimeout(() => {
       nextStep()
@@ -115,8 +181,9 @@ export default function TutorialOverlay() {
     return () => {
       if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
     }
-  }, [isActive, step, isPaused, isTransitioning, nextStep])
+  }, [isActive, step, isPaused, isTransitioning, nextStep, audioState.hasAudio, audioState.duration])
 
+  // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!isActive) return
@@ -138,6 +205,53 @@ export default function TutorialOverlay() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // Audio event handlers
+  const handleAudioPlay = () => setAudioPlaying(true)
+  const handleAudioPause = () => setAudioPlaying(false)
+  const handleAudioEnded = () => setAudioEnded(true)
+  const handleAudioTimeUpdate = () => {
+    if (audioRef.current) setAudioTime(audioRef.current.currentTime)
+  }
+  const handleAudioLoadedMetadata = () => {
+    if (audioRef.current) setAudioDuration(audioRef.current.duration)
+  }
+  const handleAudioVolumeChange = () => {
+    if (audioRef.current) {
+      setAudioVolume(audioRef.current.volume)
+      setAudioMuted(audioRef.current.muted)
+    }
+  }
+
+  // Toggle play/pause
+  const togglePlayPause = () => {
+    const audio = audioRef.current
+    if (!audio || !audioState.hasAudio) return
+    if (audioState.isPlaying) {
+      audio.pause()
+    } else {
+      audio.play().catch(() => {})
+    }
+  }
+
+  // Toggle mute
+  const toggleMute = () => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.muted = !audio.muted
+    setAudioMuted(audio.muted)
+  }
+
+  // Volume slider
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const vol = parseFloat(e.target.value)
+    if (audioRef.current) {
+      audioRef.current.volume = vol
+      audioRef.current.muted = vol === 0
+    }
+    setAudioVolume(vol)
+    if (vol > 0) setAudioMuted(false)
+  }
+
   if (!isActive || !currentTour || !step) return null
 
   const padding = step.spotlightPadding ?? 8
@@ -147,9 +261,25 @@ export default function TutorialOverlay() {
     ? ((currentStepIndex + 1) / currentTour.steps.length) * 100
     : 0
 
+  const audioProgressPercent = audioState.duration > 0
+    ? (audioState.currentTime / audioState.duration) * 100
+    : 0
+
   return (
     <div className="fixed inset-0 z-[9999] pointer-events-none">
-      {/* Dark overlay with spotlight cutout using 4 rects */}
+      {/* Hidden audio element */}
+      <audio
+        ref={audioRef}
+        onPlay={handleAudioPlay}
+        onPause={handleAudioPause}
+        onEnded={handleAudioEnded}
+        onTimeUpdate={handleAudioTimeUpdate}
+        onLoadedMetadata={handleAudioLoadedMetadata}
+        onVolumeChange={handleAudioVolumeChange}
+        preload="auto"
+      />
+
+      {/* Dark overlay with spotlight cutout */}
       {showSpotlight && elementRect ? (
         <div className="absolute inset-0" style={{ pointerEvents: 'auto' }} onClick={() => { if (!step.target) nextStep() }}>
           <div className="absolute bg-black/75" style={{ left: 0, top: 0, width: viewport.w, height: Math.max(0, elementRect.top - padding) }} />
@@ -245,6 +375,78 @@ export default function TutorialOverlay() {
             </div>
           </div>
 
+          {/* Audio Player Bar */}
+          {audioState.hasAudio && (
+            <div className="px-4 pb-2">
+              <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
+                {/* Play/Pause */}
+                <button
+                  onClick={togglePlayPause}
+                  className="p-1 rounded hover:bg-slate-700 text-orange-400 transition-colors flex-shrink-0"
+                  title={audioState.isPlaying ? 'Pause audio' : 'Play audio'}
+                >
+                  {audioState.isPlaying ? (
+                    <Pause className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                </button>
+
+                {/* Audio progress bar */}
+                <div className="flex-1 min-w-0">
+                  <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-orange-500 rounded-full transition-all"
+                      style={{ width: `${audioProgressPercent}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-0.5">
+                    <span className="text-[9px] text-slate-500">
+                      {formatTime(audioState.currentTime)}
+                    </span>
+                    <span className="text-[9px] text-slate-500">
+                      {formatTime(audioState.duration)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Mute */}
+                <button
+                  onClick={toggleMute}
+                  className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors flex-shrink-0"
+                  title={audioState.isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {audioState.isMuted || audioState.volume === 0 ? (
+                    <VolumeX className="h-3.5 w-3.5" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5" />
+                  )}
+                </button>
+
+                {/* Volume slider */}
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={audioState.isMuted ? 0 : audioState.volume}
+                  onChange={handleVolumeChange}
+                  className="w-16 h-1 accent-orange-500 cursor-pointer flex-shrink-0"
+                  title="Volume"
+                />
+
+                {/* Speaking indicator */}
+                {audioState.isPlaying && (
+                  <div className="flex gap-0.5 items-end h-3 flex-shrink-0">
+                    <div className="w-0.5 bg-orange-400 rounded-full animate-[bounce_0.6s_infinite]" style={{ height: '60%' }} />
+                    <div className="w-0.5 bg-orange-400 rounded-full animate-[bounce_0.6s_infinite_0.1s]" style={{ height: '100%' }} />
+                    <div className="w-0.5 bg-orange-400 rounded-full animate-[bounce_0.6s_infinite_0.2s]" style={{ height: '40%' }} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           <div className="px-4 pb-3">
             <h3 className="text-sm font-bold text-white mb-1">
@@ -255,7 +457,7 @@ export default function TutorialOverlay() {
             </p>
           </div>
 
-          {/* Voiceover panel */}
+          {/* Voiceover script panel */}
           {showVoiceover && (
             <div className="mx-4 mb-3 p-3 bg-slate-800/80 rounded-lg border border-slate-700">
               <div className="flex items-center gap-1.5 mb-1.5">
@@ -307,4 +509,11 @@ export default function TutorialOverlay() {
       </div>
     </div>
   )
+}
+
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return '0:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${String(secs).padStart(2, '0')}`
 }
