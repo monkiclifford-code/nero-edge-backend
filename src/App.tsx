@@ -34,43 +34,51 @@ import FoundryNCRPage from './pages/FoundryNCRPage'
 import FoundryNCRHistory from './pages/FoundryNCRHistory'
 import FoundryNcrLibrary from './pages/FoundryNcrLibrary'
 
+// Tutorial System
+import TutorialPage from './tutorial/TutorialPage'
+import { TutorialOverlay } from './tutorial'
+
 export default function App() {
   return (
     <ErrorBoundary>
-    <Routes>
-      {/* Auth */}
-      <Route path="/" element={<Login />} />
+      <Routes>
+        {/* Auth */}
+        <Route path="/" element={<Login />} />
 
-      {/* Core Workflow */}
-      <Route path="/job-entry" element={<JobEntry />} />
-      <Route path="/setup-sheet/:jobId" element={<SetupSheet />} />
-      <Route path="/setup-annotate/:jobId" element={<SetupAnnotationEditor />} />
-      <Route path="/setup-library" element={<SetupLibrary />} />
-      <Route path="/inspection/:jobId" element={<InspectionForm />} />
-      <Route path="/completion/:jobId" element={<JobCompletion />} />
+        {/* Core Workflow */}
+        <Route path="/job-entry" element={<JobEntry />} />
+        <Route path="/setup-sheet/:jobId" element={<SetupSheet />} />
+        <Route path="/setup-annotate/:jobId" element={<SetupAnnotationEditor />} />
+        <Route path="/setup-library" element={<SetupLibrary />} />
+        <Route path="/inspection/:jobId" element={<InspectionForm />} />
+        <Route path="/completion/:jobId" element={<JobCompletion />} />
 
-      {/* NCR & Feedback */}
-      <Route path="/ncr" element={<NCRForm />} />
+        {/* NCR & Feedback */}
+        <Route path="/ncr" element={<NCRForm />} />
 
-      {/* Programs */}
-      <Route path="/cnc-program" element={<CNCProgram />} />
+        {/* Programs */}
+        <Route path="/cnc-program" element={<CNCProgram />} />
 
-      {/* Upload */}
-      <Route path="/upload-setup" element={<SetupImageUpload />} />
-      <Route path="/upload" element={<UploadPortal />} />
+        {/* Upload */}
+        <Route path="/upload-setup" element={<SetupImageUpload />} />
+        <Route path="/upload" element={<UploadPortal />} />
 
-      {/* Visual History */}
-      <Route path="/visual-history" element={<VisualHistoryPage />} />
+        {/* Visual History */}
+        <Route path="/visual-history" element={<VisualHistoryPage />} />
 
-      {/* Dashboard */}
-      <Route path="/dashboard" element={<Dashboard />} />
+        {/* Dashboard */}
+        <Route path="/dashboard" element={<Dashboard />} />
 
-      {/* Foundry AI Vision */}
-      <Route path="/foundry-dashboard" element={<FoundryDashboardPage />} />
-      <Route path="/foundry-ncr" element={<FoundryNCRPage />} />
-      <Route path="/foundry-ncr-history" element={<FoundryNCRHistory />} />
-      <Route path="/foundry-ncr-library" element={<FoundryNcrLibrary />} />
-    </Routes>
+        {/* Foundry AI Vision */}
+        <Route path="/foundry-dashboard" element={<FoundryDashboardPage />} />
+        <Route path="/foundry-ncr" element={<FoundryNCRPage />} />
+        <Route path="/foundry-ncr-history" element={<FoundryNCRHistory />} />
+        <Route path="/foundry-ncr-library" element={<FoundryNcrLibrary />} />
+
+        {/* Tutorial System */}
+        <Route path="/tutorials" element={<TutorialPage />} />
+      </Routes>
+      <TutorialOverlay />
     </ErrorBoundary>
   )
 }

@@ -17,6 +17,7 @@ import {
   Flame,
   Sun,
   Moon,
+  GraduationCap,
 } from "lucide-react";
 
 interface AppLayoutProps {
@@ -132,6 +133,32 @@ export default function AppLayout({
           >
             <BarChart3 className="h-4.5 w-4.5 flex-shrink-0" />
             {!collapsed && <span>Dashboard</span>}
+          </button>
+
+          {/* Tutorial Section */}
+          {!collapsed && (
+            <div className="mt-4 mb-1 px-3">
+              <p className={`text-[9px] uppercase tracking-[0.15em] font-bold ${
+                theme === "light" ? "text-[hsl(220,14%,55%)]" : "text-white/20"
+              }`}>Training</p>
+            </div>
+          )}
+          {collapsed && <div className={`mt-3 border-t mx-2 ${
+            theme === "light" ? "border-[hsl(220,13%,88%)]" : "border-[hsl(220,14%,16%)]"
+          }`} />}
+
+          <button
+            onClick={() => navigate("/tutorials")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all ${
+              isActive("/tutorials")
+                ? "bg-[hsl(24,95%,53%)]/15 text-[hsl(24,95%,55%)]"
+                : theme === "light"
+                  ? "text-[hsl(220,14%,45%)] hover:bg-black/5 hover:text-[hsl(220,14%,20%)]"
+                  : "text-white/50 hover:bg-white/5 hover:text-white/80"
+            }`}
+          >
+            <GraduationCap className="h-4.5 w-4.5 flex-shrink-0" />
+            {!collapsed && <span>Tutorials</span>}
           </button>
 
           {/* Phase 7 — Foundry Section */}
