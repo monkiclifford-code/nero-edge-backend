@@ -87,7 +87,18 @@ function hitTest(ann: Annotation, pt: Point, zoom: number): boolean {
     case "text":
     case "callout":
       if (ann.points.length < 1) return false;
-      return dist(pt, ann.points[0]) < threshold * 2.5;
+      // Generous hit area: anchor point OR approximate box region for callout
+      if (dist(pt, ann.points[0]) < threshold * 5) return true;
+      // For callout, also check approximate box area around anchor
+      if (ann.type === "callout" && ann.text) {
+        const approxW = Math.min(220, ann.text.length * 8) / zoom;
+        const approxH = Math.max(40, Math.ceil(ann.text.length / 22) * 18) / zoom;
+        const bx = ann.points[0].x + 24 / zoom;
+        const by = ann.points[0].y - approxH - 24 / zoom;
+        if (pt.x >= bx - threshold && pt.x <= bx + approxW + threshold &&
+            pt.y >= by - threshold && pt.y <= by + approxH + threshold) return true;
+      }
+      return false;
     case "marker":
       if (ann.points.length < 1) return false;
       return dist(pt, ann.points[0]) < 55 / zoom;
@@ -327,7 +338,8 @@ export default function SetupAnnotationEditor() {
         case "callout":
         case "marker":
           if (pts.length >= 1) {
-            ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 22, 0, Math.PI * 2); ctx.stroke();
+            const selR = 22 / zoom;
+            ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, selR, 0, Math.PI * 2); ctx.stroke();
           }
           break;
         case "draw":
@@ -346,8 +358,29 @@ export default function SetupAnnotationEditor() {
       case "arrow": if (pts.length < 2) return; ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y); ctx.stroke(); const hs = Math.max(8, (ann.strokeWidth || 3) * 3); const hd = arrowHeadPoly(pts[pts.length - 1], pts[0], hs); ctx.beginPath(); ctx.moveTo(hd[0].x, hd[0].y); ctx.lineTo(hd[1].x, hd[1].y); ctx.lineTo(hd[2].x, hd[2].y); ctx.closePath(); ctx.fill(); break;
       case "circle": if (pts.length < 2) return; const r = dist(pts[0], pts[pts.length - 1]); ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, r, 0, Math.PI * 2); ctx.stroke(); break;
       case "rect": if (pts.length < 2) return; ctx.strokeRect(Math.min(pts[0].x, pts[pts.length - 1].x), Math.min(pts[0].y, pts[pts.length - 1].y), Math.abs(pts[pts.length - 1].x - pts[0].x), Math.abs(pts[pts.length - 1].y - pts[0].y)); break;
-      case "text": if (pts.length < 1 || !ann.text) return; ctx.font = `bold ${14 / zoom}px system-ui, sans-serif`; ctx.fillStyle = ann.color; ctx.fillText(ann.text, pts[0].x, pts[0].y); break;
-      case "marker": if (pts.length < 1) return; const n = ann.number || 1; const mr = 14; ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, mr, 0, Math.PI * 2); ctx.fillStyle = ann.color; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = "#fff"; ctx.font = `bold ${13 / zoom}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), pts[0].x, pts[0].y); break;
+      case "text": if (pts.length < 1 || !ann.text) return; {
+        const z = zoom;
+        const sp = (v: number) => v / z;
+        const fontSize = sp(15);
+        const pad = sp(6);
+        ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+        const metrics = ctx.measureText(ann.text);
+        const tw = metrics.width;
+        const th = sp(20);
+        const tx = pts[0].x;
+        const ty = pts[0].y - th + sp(4);
+        // Background pill
+        ctx.fillStyle = "rgba(20,20,30,0.85)";
+        roundRect(ctx, tx - pad, ty - pad, tw + pad * 2, th + pad * 2, sp(4));
+        ctx.fill();
+        // Text
+        ctx.fillStyle = ann.color;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillText(ann.text, tx, ty);
+        break;
+      }
+      case "marker": if (pts.length < 1) return; const n = ann.number || 1; const mr = 14 / zoom; ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, mr, 0, Math.PI * 2); ctx.fillStyle = ann.color; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 / zoom; ctx.stroke(); ctx.fillStyle = "#fff"; ctx.font = `bold ${13 / zoom}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), pts[0].x, pts[0].y); break;
       case "callout": if (pts.length < 1 || !ann.text) return; drawCallout(ctx, pts[0], ann.text, ann.color, canvasW, canvasH); break;
     }
   };
@@ -355,9 +388,23 @@ export default function SetupAnnotationEditor() {
   // ─── Multi-line callout with text wrapping ───
   // NOTE: `point` is already in CANVAS coordinates (drawAnnotation adds imgOffset).
   // Do NOT add imgOffset again or the callout will render at the wrong position.
+  // All sizes are specified in SCREEN pixels and divided by zoom for the scaled context.
   const drawCallout = (ctx: CanvasRenderingContext2D, point: Point, text: string, color: string, canvasW: number, canvasH: number) => {
-    const padding = 8, cr = 6, lineHeight = 18, maxWidth = 180;
-    ctx.font = `bold ${13 / zoom}px system-ui, sans-serif`;
+    const z = zoom;
+    const sp = (v: number) => v / z; // screen pixels → context pixels
+
+    const padding = sp(10);
+    const cr = sp(6);
+    const lineHeight = sp(18);
+    const maxWidth = sp(220);
+    const fontSize = sp(14);
+    const minBoxW = sp(120);
+    const minBoxH = sp(36);
+    const leaderOffset = sp(24);
+    const anchorDotR = sp(5);
+    const edgeMargin = sp(10);
+
+    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
 
     // Wrap text into lines
     const words = text.split(/\s+/);
@@ -376,25 +423,36 @@ export default function SetupAnnotationEditor() {
     if (lines.length === 0) lines.push(text);
 
     const maxLineWidth = Math.max(...lines.map(l => ctx.measureText(l).width));
-    const bw = Math.max(maxLineWidth + padding * 2, 80);
-    const bh = Math.max(lines.length * lineHeight + padding * 2, 30);
+    const bw = Math.max(maxLineWidth + padding * 2, minBoxW);
+    const bh = Math.max(lines.length * lineHeight + padding * 2, minBoxH);
+
+    // Canvas bounds in context space
+    const cRight = canvasW / z - edgeMargin;
+    const cBottom = canvasH / z - edgeMargin;
 
     // Position callout box near the anchor point, but keep it on-screen
-    let bx = point.x + 20, by = point.y - bh - 20;
+    let bx = point.x + leaderOffset;
+    let by = point.y - bh - leaderOffset;
+
     // Flip below anchor if it would go above the top
-    if (by < 10) by = point.y + 20;
+    if (by < edgeMargin) by = point.y + leaderOffset;
     // Keep within canvas right edge
-    if (bx + bw > canvasW - 10) bx = Math.max(10, point.x - bw - 20);
+    if (bx + bw > cRight) bx = Math.max(edgeMargin, point.x - bw - leaderOffset);
     // Keep within canvas left edge
-    if (bx < 10) bx = point.x + 20;
+    if (bx < edgeMargin) bx = point.x + leaderOffset;
+    // Keep within canvas bottom edge
+    if (by + bh > cBottom) by = Math.max(edgeMargin, point.y - bh - leaderOffset);
 
     // Leader line from anchor to box center
     ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(bx + bw / 2, by + bh / 2);
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
-    ctx.beginPath(); ctx.arc(point.x, point.y, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = sp(2); ctx.stroke();
+
+    // Anchor dot
+    ctx.beginPath(); ctx.arc(point.x, point.y, anchorDotR, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
 
     // Box
-    ctx.fillStyle = "rgba(20,20,30,0.9)"; ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.fillStyle = "rgba(20,20,30,0.92)"; ctx.strokeStyle = color; ctx.lineWidth = sp(2);
     roundRect(ctx, bx, by, bw, bh, cr); ctx.fill(); ctx.stroke();
 
     // Text lines
