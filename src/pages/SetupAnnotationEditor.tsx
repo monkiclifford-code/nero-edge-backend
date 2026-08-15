@@ -622,25 +622,55 @@ export default function SetupAnnotationEditor() {
       setErrorMsg("Missing operator or job data. Please go back and try again.");
       return;
     }
+
+    // Ensure required job fields are present with sensible defaults
+    const job = jobQuery.data;
+    const partNumber = job.partNumber || job.jobNumber || "Unknown";
+    const materialNumber = job.materialNumber || "N/A";
+    const revision = job.revision || "A";
+
     const dbData = setupQuery.data;
     const ctx = getStoredContext(jobId || "");
-    const workholding = dbData?.workholding?.length
-      ? dbData.workholding.map((w: any) => ({ label: w.label, value: w.value || "", displayOrder: w.displayOrder || 0 }))
+
+    // Safely build workholding (ensure array of objects with string values)
+    const rawWorkholding = dbData?.workholding?.length
+      ? dbData.workholding
       : ctx?.workholding || [];
-    const tools = dbData?.tools?.length
-      ? dbData.tools.map((t: any) => ({ toolNumber: t.toolNumber, description: t.description || undefined, toolId: t.toolId || undefined, offset: t.offset || undefined, displayOrder: t.displayOrder || 0 }))
+    const workholding = (rawWorkholding || []).map((w: any) => ({
+      label: String(w?.label || ""),
+      value: String(w?.value || ""),
+      displayOrder: Number(w?.displayOrder ?? 0),
+    })).filter((w: any) => w.label);
+
+    // Safely build tools
+    const rawTools = dbData?.tools?.length
+      ? dbData.tools
       : ctx?.tools || [];
-    const programNotes = dbData?.programNotes || ctx?.programNotes || undefined;
+    const tools = (rawTools || []).map((t: any) => ({
+      toolNumber: String(t?.toolNumber || t?.number || ""),
+      description: t?.description ? String(t.description) : undefined,
+      toolId: t?.toolId ? String(t.toolId) : undefined,
+      offset: t?.offset ? String(t.offset) : undefined,
+      displayOrder: Number(t?.displayOrder ?? 0),
+    })).filter((t: any) => t.toolNumber);
+
+    // Program notes: must be a string (or null)
+    const rawProgramNotes = dbData?.programNotes || ctx?.programNotes || undefined;
+    const programNotes = rawProgramNotes
+      ? (typeof rawProgramNotes === "string" ? rawProgramNotes : JSON.stringify(rawProgramNotes))
+      : undefined;
+
     const generalNotes = setupNotes || dbData?.generalNotes || ctx?.generalNotes || undefined;
+
     saveMutation.mutate({
       jobId: numericJobId,
-      partNumber: jobQuery.data.partNumber,
-      revision: jobQuery.data.revision,
-      materialNumber: jobQuery.data.materialNumber,
-      operatorId: operator.id,
-      operatorName: operator.name,
-      programNotes,
-      generalNotes,
+      partNumber,
+      revision,
+      materialNumber,
+      operatorId: Number(operator.id),
+      operatorName: String(operator.name || "Unknown"),
+      programNotes: programNotes || undefined,
+      generalNotes: generalNotes || undefined,
       workholding,
       tools,
       images: images.map((img, i) => ({
@@ -655,7 +685,9 @@ export default function SetupAnnotationEditor() {
           strokeWidth: a.strokeWidth ?? null,
         })),
       })),
-      changeSummary: dbData ? `Annotations updated (v${dbData.version + 1})` : `Initial setup with annotations`,
+      changeSummary: dbData
+        ? `Annotations updated (v${dbData.version + 1})`
+        : `Initial setup with annotations`,
     });
   };
 
@@ -749,10 +781,12 @@ export default function SetupAnnotationEditor() {
 
         {/* Error message */}
         {errorMsg && (
-          <div className="px-3 py-2 border-b border-rose-500/20 bg-rose-950/30 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-400 flex-shrink-0" />
-            <span className="text-xs text-rose-300">{errorMsg}</span>
-            <button onClick={() => setErrorMsg("")} className="ml-auto text-white/30 hover:text-white/60"><X className="h-3.5 w-3.5" /></button>
+          <div className="px-3 py-2 border-b border-rose-500/20 bg-rose-950/30">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-rose-400 flex-shrink-0 mt-0.5" />
+              <span className="text-xs text-rose-300 break-words flex-1 leading-relaxed">{errorMsg}</span>
+              <button onClick={() => setErrorMsg("")} className="text-white/30 hover:text-white/60 flex-shrink-0 mt-0.5"><X className="h-3.5 w-3.5" /></button>
+            </div>
           </div>
         )}
 

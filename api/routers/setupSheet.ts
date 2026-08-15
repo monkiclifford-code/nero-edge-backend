@@ -4,7 +4,7 @@ import { getDb } from "../queries/connection";
 import {
   setupSheets, setupSheetImages, setupAnnotations,
   setupTools, setupWorkholding, setupVersions,
-  jobs,
+  jobs, operators,
 } from "@db/schema";
 import { eq, and, desc, like, sql, count, inArray } from "drizzle-orm";
 
@@ -226,163 +226,199 @@ export const setupSheetRouter = createRouter({
   save: publicQuery
     .input(z.object({
       jobId: z.number(),
-      partNumber: z.string(),
-      revision: z.string().default("A"),
-      materialNumber: z.string(),
+      partNumber: z.string().min(1),
+      revision: z.string().max(20).default("A"),
+      materialNumber: z.string().min(1),
       operatorId: z.number(),
-      operatorName: z.string(),
-      programNotes: z.string().optional(),
-      generalNotes: z.string().optional(),
+      operatorName: z.string().min(1),
+      programNotes: z.string().optional().nullable(),
+      generalNotes: z.string().optional().nullable(),
       workholding: z.array(workholdingInput).default([]),
       tools: z.array(toolInput).default([]),
       images: z.array(imageInput).default([]),
-      copiedFromJobId: z.number().optional(),
-      copiedFromVersion: z.number().optional(),
+      copiedFromJobId: z.number().optional().nullable(),
+      copiedFromVersion: z.number().optional().nullable(),
       changeSummary: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
 
-      // Check if a setup already exists for this job
-      const [existing] = await db
-        .select()
-        .from(setupSheets)
-        .where(and(
-          eq(setupSheets.jobId, input.jobId),
-          eq(setupSheets.isLatest, true)
-        ))
-        .limit(1);
+      try {
+        // Verify job exists
+        const [job] = await db
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(eq(jobs.id, input.jobId))
+          .limit(1);
 
-      let setupSheetId: number;
-      let newVersion: number;
+        if (!job) {
+          throw new Error(`Job ${input.jobId} not found`);
+        }
 
-      if (existing) {
-        // ─── UPDATE existing ───
-        setupSheetId = existing.id;
-        newVersion = existing.version + 1;
+        // Verify operator exists (if not demo)
+        if (input.operatorId < 900000) {
+          const [op] = await db
+            .select({ id: operators.id })
+            .from(operators)
+            .where(eq(operators.id, input.operatorId))
+            .limit(1);
+          if (!op) {
+            throw new Error(`Operator ID ${input.operatorId} not found. Please log in again.`);
+          }
+        }
 
-        // Save FULL version snapshot BEFORE updating
-        const oldTools = await db.select().from(setupTools)
-          .where(eq(setupTools.setupSheetId, existing.id));
-        const oldWorkholding = await db.select().from(setupWorkholding)
-          .where(eq(setupWorkholding.setupSheetId, existing.id));
-        const oldImages = await db.select().from(setupSheetImages)
-          .where(eq(setupSheetImages.setupSheetId, existing.id));
+        // Check if a setup already exists for this job
+        const [existing] = await db
+          .select()
+          .from(setupSheets)
+          .where(and(
+            eq(setupSheets.jobId, input.jobId),
+            eq(setupSheets.isLatest, true)
+          ))
+          .limit(1);
 
-        await db.insert(setupVersions).values({
-          setupSheetId: existing.id,
-          version: existing.version,
+        let setupSheetId: number;
+        let newVersion: number;
+
+        if (existing) {
+          // ─── UPDATE existing ───
+          setupSheetId = existing.id;
+          newVersion = existing.version + 1;
+
+          // Save FULL version snapshot BEFORE updating
+          const oldTools = await db.select().from(setupTools)
+            .where(eq(setupTools.setupSheetId, existing.id));
+          const oldWorkholding = await db.select().from(setupWorkholding)
+            .where(eq(setupWorkholding.setupSheetId, existing.id));
+          const oldImages = await db.select().from(setupSheetImages)
+            .where(eq(setupSheetImages.setupSheetId, existing.id));
+
+          await db.insert(setupVersions).values({
+            setupSheetId: existing.id,
+            version: existing.version,
+            operatorId: input.operatorId,
+            operatorName: input.operatorName,
+            changeSummary: input.changeSummary || `Updated to version ${newVersion}`,
+            snapshotData: JSON.stringify({
+              programNotes: existing.programNotes,
+              generalNotes: existing.generalNotes,
+              updatedAt: existing.updatedAt,
+              toolCount: oldTools.length,
+              workholdingCount: oldWorkholding.length,
+              imageCount: oldImages.length,
+              tools: oldTools.map(t => ({ number: t.toolNumber, description: t.description, offset: t.offset })),
+              workholding: oldWorkholding.map(w => ({ label: w.label, value: w.value })),
+            }),
+          });
+
+          // Mark old as not latest
+          await db.update(setupSheets)
+            .set({ isLatest: false })
+            .where(eq(setupSheets.id, existing.id));
+
+          // Delete old related data (oldImages already fetched above for snapshot)
+          if (oldImages.length > 0) {
+            await db.delete(setupAnnotations)
+              .where(inArray(setupAnnotations.imageId, oldImages.map(i => i.id)));
+          }
+          await db.delete(setupWorkholding)
+            .where(eq(setupWorkholding.setupSheetId, existing.id));
+          await db.delete(setupTools)
+            .where(eq(setupTools.setupSheetId, existing.id));
+          await db.delete(setupSheetImages)
+            .where(eq(setupSheetImages.setupSheetId, existing.id));
+        } else {
+          newVersion = 1;
+        }
+
+        // ─── Create new setup sheet (or replacement) ───
+        const [sheet] = await db.insert(setupSheets).values({
+          jobId: input.jobId,
+          partNumber: input.partNumber,
+          revision: input.revision || "A",
+          materialNumber: input.materialNumber,
           operatorId: input.operatorId,
           operatorName: input.operatorName,
-          changeSummary: input.changeSummary || `Updated to version ${newVersion}`,
-          snapshotData: JSON.stringify({
-            programNotes: existing.programNotes,
-            generalNotes: existing.generalNotes,
-            updatedAt: existing.updatedAt,
-            toolCount: oldTools.length,
-            workholdingCount: oldWorkholding.length,
-            imageCount: oldImages.length,
-            tools: oldTools.map(t => ({ number: t.toolNumber, description: t.description, offset: t.offset })),
-            workholding: oldWorkholding.map(w => ({ label: w.label, value: w.value })),
-          }),
-        });
-
-        // Mark old as not latest
-        await db.update(setupSheets)
-          .set({ isLatest: false })
-          .where(eq(setupSheets.id, existing.id));
-
-        // Delete old related data (oldImages already fetched above for snapshot)
-        if (oldImages.length > 0) {
-          await db.delete(setupAnnotations)
-            .where(inArray(setupAnnotations.imageId, oldImages.map(i => i.id)));
-        }
-        await db.delete(setupWorkholding)
-          .where(eq(setupWorkholding.setupSheetId, existing.id));
-        await db.delete(setupTools)
-          .where(eq(setupTools.setupSheetId, existing.id));
-        await db.delete(setupSheetImages)
-          .where(eq(setupSheetImages.setupSheetId, existing.id));
-      } else {
-        newVersion = 1;
-      }
-
-      // ─── Create new setup sheet (or replacement) ───
-      const [sheet] = await db.insert(setupSheets).values({
-        jobId: input.jobId,
-        partNumber: input.partNumber,
-        revision: input.revision,
-        materialNumber: input.materialNumber,
-        operatorId: input.operatorId,
-        operatorName: input.operatorName,
-        programNotes: input.programNotes || null,
-        generalNotes: input.generalNotes || null,
-        version: newVersion,
-        isLatest: true,
-        approvalStatus: "pending",   // Every edit requires re-approval
-        copiedFromJobId: input.copiedFromJobId ?? null,
-        copiedFromVersion: input.copiedFromVersion ?? null,
-      }).returning();
-
-      setupSheetId = sheet.id;
-
-      // ─── Insert workholding ───
-      if (input.workholding.length > 0) {
-        await db.insert(setupWorkholding).values(
-          input.workholding.map((wh) => ({
-            setupSheetId,
-            label: wh.label,
-            value: wh.value || "",
-            displayOrder: wh.displayOrder,
-          }))
-        );
-      }
-
-      // ─── Insert tools ───
-      if (input.tools.length > 0) {
-        await db.insert(setupTools).values(
-          input.tools.map((t) => ({
-            setupSheetId,
-            toolNumber: t.toolNumber,
-            description: t.description || null,
-            toolId: t.toolId || null,
-            offset: t.offset || null,
-            displayOrder: t.displayOrder,
-          }))
-        );
-      }
-
-      // ─── Insert images + annotations ───
-      for (const img of input.images) {
-        const [imageRecord] = await db.insert(setupSheetImages).values({
-          setupSheetId,
-          imageData: img.imageData,
-          displayOrder: img.displayOrder,
+          programNotes: input.programNotes ?? null,
+          generalNotes: input.generalNotes ?? null,
+          version: newVersion,
+          isLatest: true,
+          approvalStatus: "pending",
+          copiedFromJobId: input.copiedFromJobId ?? null,
+          copiedFromVersion: input.copiedFromVersion ?? null,
         }).returning();
 
-        if (img.annotations.length > 0) {
-          await db.insert(setupAnnotations).values(
-            img.annotations.map((ann) => ({
-              imageId: imageRecord.id,
-              type: ann.type,
-              color: ann.color,
-              points: JSON.stringify(ann.points),
-              text: ann.text || null,
-              number: ann.number || null,
-              strokeWidth: ann.strokeWidth || null,
+        setupSheetId = sheet.id;
+
+        // ─── Insert workholding ───
+        if (input.workholding.length > 0) {
+          await db.insert(setupWorkholding).values(
+            input.workholding.map((wh) => ({
+              setupSheetId,
+              label: wh.label,
+              value: wh.value || "",
+              displayOrder: wh.displayOrder,
             }))
           );
         }
-      }
 
-      return {
-        success: true,
-        setupSheetId,
-        version: newVersion,
-        message: existing
-          ? `Setup updated to version ${newVersion}`
-          : `Setup created (version ${newVersion})`,
-      };
+        // ─── Insert tools ───
+        if (input.tools.length > 0) {
+          await db.insert(setupTools).values(
+            input.tools.map((t) => ({
+              setupSheetId,
+              toolNumber: t.toolNumber,
+              description: t.description || null,
+              toolId: t.toolId || null,
+              offset: t.offset || null,
+              displayOrder: t.displayOrder,
+            }))
+          );
+        }
+
+        // ─── Insert images + annotations ───
+        for (const img of input.images) {
+          const [imageRecord] = await db.insert(setupSheetImages).values({
+            setupSheetId,
+            imageData: img.imageData,
+            displayOrder: img.displayOrder,
+          }).returning();
+
+          if (img.annotations.length > 0) {
+            await db.insert(setupAnnotations).values(
+              img.annotations.map((ann) => ({
+                imageId: imageRecord.id,
+                type: ann.type,
+                color: ann.color,
+                points: JSON.stringify(ann.points),
+                text: ann.text || null,
+                number: ann.number ?? null,
+                strokeWidth: ann.strokeWidth ?? null,
+              }))
+            );
+          }
+        }
+
+        return {
+          success: true,
+          setupSheetId,
+          version: newVersion,
+          message: existing
+            ? `Setup updated to version ${newVersion}`
+            : `Setup created (version ${newVersion})`,
+        };
+      } catch (error: any) {
+        console.error("Setup sheet save error:", error);
+        // Extract the actual PostgreSQL error message
+        const pgMessage = error?.message || String(error);
+        if (pgMessage.includes("foreign key constraint")) {
+          throw new Error(`Database reference error: ${pgMessage}. The operator or job may not exist in the database.`);
+        }
+        if (pgMessage.includes("null value in column")) {
+          throw new Error(`Missing required field: ${pgMessage}`);
+        }
+        throw new Error(`Save failed: ${pgMessage}`);
+      }
     }),
 
   // ─── GET version history ───

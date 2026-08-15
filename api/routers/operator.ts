@@ -24,23 +24,17 @@ export const operatorRouter = createRouter({
         return { success: true, operator: existing, message: "Operator already exists" };
       }
 
-      const insertResult = await db
+      const [operator] = await db
         .insert(operators)
         .values({
           name: input.name,
           operatorId: input.operatorId,
-        });
+        })
+        .returning();
 
-      const insertedId = insertResult[0]?.insertId;
-      if (!insertedId) {
+      if (!operator) {
         throw new Error("Failed to insert operator");
       }
-
-      const [operator] = await db
-        .select()
-        .from(operators)
-        .where(eq(operators.id, Number(insertedId)))
-        .limit(1);
 
       return { success: true, operator };
     }),
